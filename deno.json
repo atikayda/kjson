@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "exports": "./mod.ts",
   "icon": "assets/kJSON.svg",
-  "description": "A powerful, developer-friendly JSON parser with BigInt, Date, and JSON5 support",
+  "description": "🎯 kJSON - Kind JSON parser with BigInt, Date & JSON5 support. Developer-friendly JSON parsing for modern JavaScript/TypeScript.",
   "license": "MIT",
   "repository": "https://github.com/atikayda/kjson",
   "homepage": "https://github.com/atikayda/kjson",
