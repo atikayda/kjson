@@ -561,6 +561,14 @@ The kJSON logo and brand assets are available in the [`assets/`](assets/) direct
 
 ## 📋 Changelog
 
+### v1.0.1 (Documentation Update)
+- 📖 Enhanced README with comprehensive documentation
+- 🎨 Improved logo display (WebP format)
+- 🌟 Added detailed use cases and examples
+- 🤝 Enhanced contribution guidelines
+- 🔗 Added GitHub repository links
+- 📚 Better API documentation with parameters and returns
+
 ### v1.0.0 (Initial Release)
 - ✨ Beautiful gradient logo design
 - 🚀 Full JSON5 syntax support (comments, trailing commas, unquoted keys)
