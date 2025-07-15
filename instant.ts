@@ -10,10 +10,53 @@ const TEMPORAL_AVAILABLE = typeof globalThis.Temporal !== 'undefined' &&
                           typeof globalThis.Temporal.Instant !== 'undefined' &&
                           typeof globalThis.Temporal.Duration !== 'undefined';
 
-/**
- * Use Temporal.Instant if available, otherwise use our polyfill
- */
-export const Instant = TEMPORAL_AVAILABLE ? globalThis.Temporal.Instant : class InstantPolyfill {
+// Define minimal interfaces for our polyfills
+interface InstantLike {
+  readonly epochNanoseconds: bigint;
+  readonly epochMilliseconds: number;
+  readonly epochSeconds: number;
+  toString(): string;
+  toJSON(): string;
+  valueOf(): number;
+  toDate(): Date;
+  compare(other: InstantLike): number;
+  equals(other: InstantLike): boolean;
+  add(duration: DurationLike): InstantLike;
+  subtract(duration: DurationLike): InstantLike;
+  since(other: InstantLike): DurationLike;
+  until(other: InstantLike): DurationLike;
+}
+
+interface DurationLike {
+  total(unit: string): number;
+  toString(): string;
+  toJSON(): string;
+  add(other: DurationLike): DurationLike;
+  subtract(other: DurationLike): DurationLike;
+  negated(): DurationLike;
+  abs(): DurationLike;
+  compare(other: DurationLike): number;
+  equals(other: DurationLike): boolean;
+  readonly sign: number;
+}
+
+interface InstantConstructor {
+  new (nanos: bigint): InstantLike;
+  fromEpochNanoseconds(nanos: bigint): InstantLike;
+  fromEpochMilliseconds(millis: number): InstantLike;
+  fromEpochSeconds(seconds: number): InstantLike;
+  now(): InstantLike;
+  compare(one: InstantLike, two: InstantLike): number;
+  from(isoString: string): InstantLike;
+}
+
+interface DurationConstructor {
+  new (nanos: bigint): DurationLike;
+  compare(one: DurationLike, two: DurationLike): number;
+  from(input: string | object): DurationLike;
+}
+
+class InstantPolyfill implements InstantLike {
   private readonly nanos: bigint;
 
   constructor(nanos: bigint) {
@@ -47,6 +90,10 @@ export const Instant = TEMPORAL_AVAILABLE ? globalThis.Temporal.Instant : class 
   static now(): InstantPolyfill {
     const millis = Date.now();
     return new InstantPolyfill(BigInt(millis) * 1_000_000n);
+  }
+
+  static compare(one: InstantLike, two: InstantLike): number {
+    return one.compare(two);
   }
 
   static from(isoString: string): InstantPolyfill {
@@ -143,49 +190,42 @@ export const Instant = TEMPORAL_AVAILABLE ? globalThis.Temporal.Instant : class 
     return new Date(this.epochMilliseconds);
   }
 
-  compare(other: InstantPolyfill): number {
-    if (this.nanos < other.nanos) return -1;
-    if (this.nanos > other.nanos) return 1;
+  compare(other: InstantLike): number {
+    if (this.nanos < other.epochNanoseconds) return -1;
+    if (this.nanos > other.epochNanoseconds) return 1;
     return 0;
   }
 
-  equals(other: InstantPolyfill): boolean {
-    return this.nanos === other.nanos;
+  equals(other: InstantLike): boolean {
+    return this.nanos === other.epochNanoseconds;
   }
 
-  add(duration: any): InstantPolyfill {
-    const durationNanos = isDuration(duration) ? duration.total('nanoseconds') : duration.toNanos();
+  add(duration: DurationLike): InstantLike {
+    const durationNanos = duration.total('nanoseconds');
     return new InstantPolyfill(this.nanos + BigInt(Math.floor(durationNanos)));
   }
 
-  subtract(duration: any): InstantPolyfill {
-    const durationNanos = isDuration(duration) ? duration.total('nanoseconds') : duration.toNanos();
+  subtract(duration: DurationLike): InstantLike {
+    const durationNanos = duration.total('nanoseconds');
     return new InstantPolyfill(this.nanos - BigInt(Math.floor(durationNanos)));
   }
 
-  since(other: InstantPolyfill): any {
-    const nanosDiff = this.nanos - other.nanos;
+  since(other: InstantLike): DurationLike {
+    const nanosDiff = this.nanos - other.epochNanoseconds;
     return Duration.from({ nanoseconds: Number(nanosDiff) });
   }
 
-  until(other: InstantPolyfill): any {
-    const nanosDiff = other.nanos - this.nanos;
+  until(other: InstantLike): DurationLike {
+    const nanosDiff = other.epochNanoseconds - this.nanos;
     return Duration.from({ nanoseconds: Number(nanosDiff) });
   }
 };
 
-/**
- * Use Temporal.Duration if available, otherwise use our polyfill
- */
-export const Duration = TEMPORAL_AVAILABLE ? globalThis.Temporal.Duration : class DurationPolyfill {
+class DurationPolyfill implements DurationLike {
   private readonly nanos: bigint;
 
   constructor(nanos: bigint) {
     this.nanos = nanos;
-  }
-
-  toNanos(): bigint {
-    return this.nanos;
   }
 
   total(unit: string): number {
@@ -207,6 +247,10 @@ export const Duration = TEMPORAL_AVAILABLE ? globalThis.Temporal.Duration : clas
       default:
         throw new RangeError(`Unknown unit: ${unit}`);
     }
+  }
+
+  static compare(one: DurationLike, two: DurationLike): number {
+    return one.compare(two);
   }
 
   static from(input: string | object): DurationPolyfill {
@@ -312,30 +356,31 @@ export const Duration = TEMPORAL_AVAILABLE ? globalThis.Temporal.Duration : clas
     return this.toString();
   }
 
-  add(other: DurationPolyfill): DurationPolyfill {
-    return new DurationPolyfill(this.nanos + other.nanos);
+  add(other: DurationLike): DurationLike {
+    return new DurationPolyfill(this.nanos + BigInt(other.total('nanoseconds')));
   }
 
-  subtract(other: DurationPolyfill): DurationPolyfill {
-    return new DurationPolyfill(this.nanos - other.nanos);
+  subtract(other: DurationLike): DurationLike {
+    return new DurationPolyfill(this.nanos - BigInt(other.total('nanoseconds')));
   }
 
-  negated(): DurationPolyfill {
+  negated(): DurationLike {
     return new DurationPolyfill(-this.nanos);
   }
 
-  abs(): DurationPolyfill {
+  abs(): DurationLike {
     return new DurationPolyfill(this.nanos < 0n ? -this.nanos : this.nanos);
   }
 
-  compare(other: DurationPolyfill): number {
-    if (this.nanos < other.nanos) return -1;
-    if (this.nanos > other.nanos) return 1;
+  compare(other: DurationLike): number {
+    const otherNanos = BigInt(other.total('nanoseconds'));
+    if (this.nanos < otherNanos) return -1;
+    if (this.nanos > otherNanos) return 1;
     return 0;
   }
 
-  equals(other: DurationPolyfill): boolean {
-    return this.nanos === other.nanos;
+  equals(other: DurationLike): boolean {
+    return this.nanos === BigInt(other.total('nanoseconds'));
   }
 
   get sign(): number {
@@ -346,21 +391,31 @@ export const Duration = TEMPORAL_AVAILABLE ? globalThis.Temporal.Duration : clas
 };
 
 /**
+ * Use Temporal.Instant if available, otherwise use our polyfill
+ */
+export const Instant: InstantConstructor = TEMPORAL_AVAILABLE ? (globalThis.Temporal.Instant as unknown as InstantConstructor) : InstantPolyfill;
+
+/**
+ * Use Temporal.Duration if available, otherwise use our polyfill
+ */
+export const Duration: DurationConstructor = TEMPORAL_AVAILABLE ? (globalThis.Temporal.Duration as unknown as DurationConstructor) : DurationPolyfill;
+
+/**
  * Type guard to check if a value is an Instant
  */
-export function isInstant(value: any): value is typeof Instant {
+export function isInstant(value: any): value is InstantLike {
   if (TEMPORAL_AVAILABLE) {
     return value instanceof globalThis.Temporal.Instant;
   }
-  return value instanceof (Instant as any);
+  return value instanceof InstantPolyfill;
 }
 
 /**
  * Type guard to check if a value is a Duration
  */
-export function isDuration(value: any): value is typeof Duration {
+export function isDuration(value: any): value is DurationLike {
   if (TEMPORAL_AVAILABLE) {
     return value instanceof globalThis.Temporal.Duration;
   }
-  return value instanceof (Duration as any);
+  return value instanceof DurationPolyfill;
 }
