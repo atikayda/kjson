@@ -3,7 +3,7 @@
 <div align="center">
   <img src="assets/kJSON.webp" alt="kJSON Logo" width="160" height="160">
   <br><br>
-  <strong>🎯 Developer-friendly JSON parser with BigInt, Date & JSON5 support</strong>
+  <strong>🎯 Developer-friendly JSON parser with BigInt, Decimal128, Instant, Duration, UUID & JSON5 support</strong>
   <br><br>
   
   [![JSR](https://jsr.io/badges/@atikayda/kjson)](https://jsr.io/@atikayda/kjson)
@@ -22,7 +22,10 @@
 Standard JSON is limiting. kJSON is **kind** to developers by supporting:
 
 - 🔢 **BigInt Values** - Handle large integers without precision loss
-- 📅 **Date Objects** - Automatic ISO timestamp parsing and serialization  
+- 💰 **Decimal128** - IEEE 754 decimal arithmetic for exact calculations (no 0.1 + 0.2 errors!)
+- 📅 **Date Objects** - Automatic ISO timestamp parsing
+- 🆔 **UUID Support** - Parse and stringify UUIDs without quotes and serialization  
+- ⏰ **Temporal.Instant** - Modern temporal API support with nanosecond precision
 - 💬 **Comments** - Single-line and multi-line comments for self-documenting data
 - 🎯 **Flexible Syntax** - Unquoted keys, trailing commas, single quotes
 - 🛡️ **Type Safety** - Full TypeScript support with comprehensive type definitions
@@ -50,6 +53,8 @@ const data = parse(`{
   // User configuration
   name: "Alice",
   balance: 1234567890123456789n,  // BigInt support
+  creditLimit: 5000.00m,           // Decimal128 for exact money
+  userId: 550e8400-e29b-41d4-a716-446655440000,  // UUID
   lastLogin: 2025-01-15T10:30:00.000Z,  // Date parsing
   settings: {
     theme: 'dark',
@@ -58,6 +63,7 @@ const data = parse(`{
 }`);
 
 console.log(typeof data.balance);    // "bigint"
+console.log(data.creditLimit);      // Decimal128 { value: "5000.00" }
 console.log(data.lastLogin instanceof Date); // true
 ```
 
@@ -80,6 +86,33 @@ const blockData = parse(`{
 }`);
 
 console.log(blockData.slot);  // 250845123n (BigInt preserved)
+```
+
+### Financial/Trading Use Case
+```typescript
+import { Decimal128 } from "@atikayda/kjson/decimal128";
+
+// Perfect for financial calculations
+const invoice = parse(`{
+  id: "INV-001",
+  items: [
+    { name: "Widget", price: 19.99m, quantity: 3 },
+    { name: "Gadget", price: 49.95m, quantity: 2 }
+  ],
+  subtotal: 159.87m,
+  tax: 12.79m,
+  total: 172.66m
+}`);
+
+// Exact decimal arithmetic - no floating point errors!
+const item1Total = invoice.items[0].price.multiply(3);
+console.log(item1Total.toString()); // "59.97" (exactly!)
+
+// Demonstrate the problem with regular JavaScript numbers
+console.log(0.1 + 0.2);  // 0.30000000000000004 (oops!)
+const d1 = new Decimal128("0.1");
+const d2 = new Decimal128("0.2");
+console.log(d1.add(d2).toString());  // "0.3" (exact!)
 ```
 
 ### Configuration Files
@@ -146,6 +179,7 @@ Parse a kJSON string into a JavaScript value with full type preservation.
 - `allowComments: boolean` - Allow `//` and `/* */` comments (default: `true`)
 - `allowUnquotedKeys: boolean` - Allow unquoted object keys (default: `true`)
 - `parseDates: boolean` - Parse ISO date strings as Date objects (default: `true`)
+- `parseTemporalInstants: boolean` - Parse ISO date strings as Temporal.Instant objects (default: `false`)
 
 **Returns:** `any` - The parsed JavaScript value with preserved types
 
@@ -182,6 +216,7 @@ Convert a JavaScript value to a kJSON string with intelligent formatting.
 **Options:**
 - `bigintSuffix: boolean` - Include BigInt values with 'n' suffix (default: `true`)
 - `serializeDates: boolean` - Convert Date objects to ISO strings (default: `true`)
+- `serializeTemporalInstants: boolean` - Convert Temporal.Instant objects to ISO strings (default: `false`)
 - `space: string | number` - Indentation for pretty printing (default: `0`)
 - `quoteKeys: boolean` - Quote all object keys (default: `false`)
 
@@ -308,7 +343,10 @@ console.log(compactStringifier(data)); // Compact
 | Type | Description | Example | Benefit |
 |------|-------------|---------|---------|
 | `bigint` | Large integers with `n` suffix | `123456789012345678901234567890n` | No precision loss |
+| `Decimal128` | IEEE 754 decimals with `m` suffix | `99.99m`, `0.1m` | Exact decimal arithmetic |
 | `Date` | ISO timestamp literals | `2025-01-01T00:00:00.000Z` | Automatic parsing |
+| `Temporal.Instant` | Modern temporal objects with nanosecond precision | `2025-01-01T00:00:00.123456789Z` | Precise timestamps |
+| `UUID` | Unquoted UUID literals | `550e8400-e29b-41d4-a716-446655440000` | Native UUID support |
 | `undefined` | Undefined values | `undefined` | JavaScript compatibility |
 
 ### 🎨 JSON5 Syntax Features
@@ -356,12 +394,117 @@ const config = parse(`{
 
 #### Flexible Quotes
 ```typescript
-// Mix single and double quotes freely
+// Mix single, double, and backtick quotes freely
 const data = parse(`{
   message: 'Hello "world"',
   path: "/home/user",
-  template: 'This is ${variable} interpolation'
+  multiline: \`This is line 1
+This is line 2\`,
+  mixed: \`He said "Hello" and she replied 'Hi'\`
 }`);
+
+// Smart quote selection during stringify - chooses the quote type
+// that requires the least escaping. In case of ties:
+// single quotes > double quotes > backticks
+stringify({text: "simple"});           // {text: 'simple'}
+stringify({text: "it's nice"});        // {text: "it's nice"}
+stringify({text: 'He said "hi"'});     // {text: 'He said "hi"'}
+stringify({text: `Mix 'both' "types"`}); // {text: \`Mix 'both' "types"\`}
+```
+
+### ⏰ Temporal.Instant Support (Experimental)
+
+kJSON supports the modern Temporal API when available in Deno with the `--unstable-temporal` flag.
+
+#### Requirements
+- Deno with `--unstable-temporal` flag
+- Import kJSON in an environment where `Temporal` is available
+
+#### Basic Usage
+```typescript
+import { parse, stringify } from "jsr:@atikayda/kjson";
+
+// Enable Temporal.Instant parsing
+const data = parse(`{
+  created: 2025-01-01T10:00:00.000Z,
+  updated: 2025-01-01T12:30:45.123456789Z,  // Nanosecond precision
+  timezone_aware: 2025-01-01T15:30:00+05:30
+}`, {
+  parseTemporalInstants: true
+});
+
+console.log(data.created instanceof Temporal.Instant); // true
+console.log(data.updated.toString()); // "2025-01-01T12:30:45.123456789Z"
+```
+
+#### Serialization
+```typescript
+const instant = Temporal.Instant.from("2025-01-01T00:00:00.000Z");
+const json = stringify({
+  timestamp: instant,
+  event: "system_start"
+}, {
+  serializeTemporalInstants: true
+});
+
+// Output: { timestamp: 2025-01-01T00:00:00Z, event: "system_start" }
+```
+
+#### Precision & Formats
+```typescript
+// Supports various ISO 8601 formats
+const formats = [
+  "2025-01-01T00:00:00.000Z",           // Milliseconds
+  "2025-01-01T00:00:00.123456789Z",    // Nanoseconds
+  "2025-01-01T00:00:00+00:00",         // Timezone offset
+  "2025-01-01T12:30:45.123+05:30"     // Regional timezone
+];
+
+formats.forEach(format => {
+  const parsed = parse(`{ time: ${format} }`, { parseTemporalInstants: true });
+  console.log(parsed.time instanceof Temporal.Instant); // true
+});
+```
+
+#### Date vs Temporal.Instant
+When both `parseDates` and `parseTemporalInstants` are enabled, Temporal.Instant takes precedence:
+
+```typescript
+// Temporal.Instant takes precedence when both are enabled
+const parsed = parse(`{ timestamp: 2025-01-01T00:00:00.000Z }`, {
+  parseDates: true,
+  parseTemporalInstants: true
+});
+
+console.log(parsed.timestamp instanceof Temporal.Instant); // true
+console.log(parsed.timestamp instanceof Date); // false
+```
+
+For round-trip consistency, choose one parsing mode:
+
+```typescript
+// Consistent Date parsing
+const dateMode = parse(json, { parseDates: true, parseTemporalInstants: false });
+
+// Consistent Temporal.Instant parsing  
+const temporalMode = parse(json, { parseDates: false, parseTemporalInstants: true });
+```
+
+#### Performance & Compatibility
+- Graceful degradation: When Temporal API is not available, options are ignored
+- Round-trip consistency: Temporal.Instant objects serialize/parse perfectly
+- Nanosecond precision: Full support for high-precision timestamps
+- Zero runtime overhead when not used
+
+```typescript
+// Run with: deno run --unstable-temporal script.ts
+import { parse } from "jsr:@atikayda/kjson";
+
+// Works regardless of Temporal availability
+const data = parse(`{ created: 2025-01-01T00:00:00.000Z }`, {
+  parseTemporalInstants: true,  // Ignored if Temporal not available
+  parseDates: true              // Fallback to Date objects
+});
 ```
 
 ## 🎯 Real-World Use Cases
@@ -560,6 +703,14 @@ The kJSON logo and brand assets are available in the [`assets/`](assets/) direct
 **JSR**: [https://jsr.io/@atikayda/kjson](https://jsr.io/@atikayda/kjson)
 
 ## 📋 Changelog
+
+### v1.1.0 (Temporal.Instant Support)
+- ⏰ **NEW**: Temporal.Instant support with `parseTemporalInstants` and `serializeTemporalInstants` options
+- 🎯 Nanosecond precision timestamp support (e.g., `2025-01-01T00:00:00.123456789Z`)
+- 🔧 Requires Deno `--unstable-temporal` flag for Temporal API access
+- 🛡️ Graceful degradation when Temporal API is not available
+- 📚 Comprehensive Temporal.Instant documentation and examples
+- ✅ Full test coverage with 10+ new Temporal-specific tests
 
 ### v1.0.1 (Documentation Update)
 - 📖 Enhanced README with comprehensive documentation

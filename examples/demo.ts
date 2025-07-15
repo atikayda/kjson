@@ -5,12 +5,15 @@
  * 
  * This demo demonstrates the key features of kJSON (Kind JSON):
  * - BigInt support with 'n' suffix
+ * - Decimal128 support with 'm' suffix for precise decimals
  * - Date objects as ISO literals
+ * - UUID support (unquoted)
  * - JSON5 syntax (unquoted keys, trailing commas, comments)
  * - Type preservation during parsing and stringification
  */
 
 import { parse, stringify, kJSON } from "../mod.ts";
+import { Decimal128 } from "../decimal128.ts";
 
 console.log("🚀 kJSON - Kind JSON Demo\n");
 
@@ -25,6 +28,14 @@ const testData = {
   currentSlot: 250845123n,
   tokenAmount: 999999999999999999n,
   
+  // Decimal128 values (perfect for prices, money calculations)
+  price: new Decimal128("99.99"),
+  fee: new Decimal128("0.25"),
+  balance: new Decimal128("12345.67"),
+  
+  // UUID (unquoted in JSON)
+  id: crypto.randomUUID(),
+  
   // Date objects (automatically serialized as ISO literals)
   createdAt: new Date("2025-06-12T20:22:35.328Z"),
   lastUpdate: new Date(),
@@ -33,6 +44,7 @@ const testData = {
   config: {
     maxRetries: 5,
     timeout: 30000n,
+    minPrice: new Decimal128("0.01"),
     endpoints: [
       "https://api.mainnet-beta.solana.com",
       "https://solana-api.projectserum.com"
@@ -41,6 +53,11 @@ const testData = {
   
   // Arrays with mixed types
   recentSlots: [250845120n, 250845121n, 250845122n],
+  priceHistory: [
+    new Decimal128("98.50"),
+    new Decimal128("99.00"),
+    new Decimal128("99.99")
+  ],
   
   // Strings that look like dates (should remain strings)
   notes: "Last processed: 2025-06-12T20:22:35.328Z"
@@ -65,6 +82,8 @@ console.log();
 // Verify types are preserved
 console.log("🔍 Type verification:");
 console.log(`currentSlot type: ${typeof parsed.currentSlot} (${parsed.currentSlot})`);
+console.log(`price type: ${parsed.price?.constructor?.name || typeof parsed.price} (${parsed.price})`);
+console.log(`id type: ${typeof parsed.id} (UUID string)`);
 console.log(`createdAt type: ${typeof parsed.createdAt} (${parsed.createdAt instanceof Date ? 'Date object' : 'not Date'})`);
 console.log(`notes type: ${typeof parsed.notes} (string preserved)`);
 console.log();
@@ -89,8 +108,8 @@ const json5Examples = [
   // Mixed quotes
   `{single: 'value', double: "value"}`,
   
-  // BigInt and Date literals
-  `{slot: 12345n, created: 2025-01-01T00:00:00.000Z}`
+  // BigInt, Decimal, and Date literals
+  `{slot: 12345n, price: 99.99m, created: 2025-01-01T00:00:00.000Z}`
 ];
 
 json5Examples.forEach((example, index) => {
@@ -150,6 +169,27 @@ const prettyStringifier = kJSON.createStringifier({
 const prettyResult = prettyStringifier({ name: "test", count: 42n });
 console.log("  Pretty formatted output:");
 console.log(prettyResult);
+console.log();
+
+// Demonstrate Decimal128 arithmetic
+console.log("💰 Decimal128 precise arithmetic:");
+if (parsed.price instanceof Decimal128) {
+  const price = parsed.price;
+  const fee = parsed.fee;
+  const total = price.add(fee);
+  console.log(`Price: ${price.toString()}`);
+  console.log(`Fee: ${fee.toString()}`);
+  console.log(`Total: ${total.toString()} (exactly ${price.toString()} + ${fee.toString()})`);
+  
+  // Show why Decimal128 is important
+  console.log("⚠️  JavaScript number precision problem:");
+  console.log(`0.1 + 0.2 = ${0.1 + 0.2} (binary floating point error!)`);
+  const d1 = new Decimal128("0.1");
+  const d2 = new Decimal128("0.2");
+  console.log(`Decimal128: 0.1 + 0.2 = ${d1.add(d2).toString()} (exact!)`);
+} else {
+  console.log("Note: Decimal128 support requires importing the Decimal128 class");
+}
 console.log();
 
 // Performance comparison with standard JSON
@@ -253,10 +293,11 @@ console.log(`  Trading enabled: ${configData.features.trading}`);
 console.log();
 
 console.log("🌟 Key advantages of kJSON:");
-console.log("- Type preservation for BigInt and Date objects");
+console.log("- Type preservation for BigInt, Decimal128, Date, and UUID");
+console.log("- Decimal128 for precise decimal arithmetic (no 0.1 + 0.2 errors!)");
 console.log("- JSON5 syntax for more flexible configuration files");
 console.log("- Comments support for self-documenting data");
-console.log("- Perfect for blockchain applications with large integers");
+console.log("- Perfect for blockchain and financial applications");
 console.log("- Backward compatible with standard JSON");
 console.log("- High performance with reasonable overhead");
 console.log();

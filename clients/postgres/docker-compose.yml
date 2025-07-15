@@ -1,0 +1,40 @@
+services:
+  postgres-kjson:
+    build:
+      context: ..
+      dockerfile: postgres/Dockerfile
+    container_name: kjson-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts
+    volumes:
+      - kjson-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    depends_on:
+      postgres-kjson:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres-kjson
+      PGPORT: 5432
+      PGUSER: kjson_test
+      PGPASSWORD: kjson_test
+      PGDATABASE: kjson_test
+    volumes:
+      - ./test:/test
+      - ./test-results:/test-results
+    command: bash /test/run-tests.sh
+
+volumes:
+  kjson-pgdata:

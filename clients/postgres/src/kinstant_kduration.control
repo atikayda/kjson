@@ -1,0 +1,6 @@
+# kinstant_kduration extension control file
+comment = 'High-precision temporal types with nanosecond precision'
+default_version = '1.0'
+module_pathname = '$libdir/kinstant_kduration'
+relocatable = true
+schema = public

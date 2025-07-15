@@ -7,7 +7,10 @@
  * - JSON5-style syntax (unquoted keys, trailing commas)
  * - JSONC comments (single-line and multi-line)
  * - BigInt values with 'n' suffix (e.g., 12345n)
- * - Date objects as ISO timestamps (e.g., 2025-06-12T20:22:35.328Z)
+ * - Instant objects as ISO timestamps with nanosecond precision (e.g., 2025-06-12T20:22:35.328456789Z)
+ * - Duration objects as ISO duration strings (e.g., PT1H2M3.456S)
+ * - UUID objects from unquoted UUID format (e.g., 550e8400-e29b-41d4-a716-446655440000)
+ * - Decimal128 from numbers with 'm' suffix (e.g., 123.45m)
  * - Standard JSON compatibility
  * - TypeScript-first with comprehensive type safety
  * 
@@ -16,12 +19,19 @@
  * - Configuration files with comments
  * - APIs requiring type preservation
  * - WebSocket messages with mixed data types
+ * - Financial applications with decimal precision
  * 
  * @module kJSON
  * @version 1.0.0
  * @author Kaity (Atikayda)
  * @license MIT
  */
+
+import { UUID, isUUID } from "./uuid.ts";
+import { Decimal128, isDecimal128 } from "./decimal128.ts";
+import { Instant, Duration, isInstant, isDuration } from "./instant.ts";
+
+export { UUID, isUUID, Decimal128, isDecimal128, Instant, Duration, isInstant, isDuration };
 
 export interface KJsonParseOptions {
   /** Allow trailing commas in objects and arrays */
@@ -30,15 +40,19 @@ export interface KJsonParseOptions {
   allowComments?: boolean;
   /** Allow unquoted object keys */
   allowUnquotedKeys?: boolean;
-  /** Parse ISO date strings as Date objects */
-  parseDates?: boolean;
+  /** Parse ISO date strings as Instant objects */
+  parseInstants?: boolean;
+  /** Parse ISO duration strings as Duration objects */
+  parseDurations?: boolean;
 }
 
 export interface KJsonStringifyOptions {
   /** Include BigInt values with 'n' suffix */
   bigintSuffix?: boolean;
-  /** Convert Date objects to ISO strings */
-  serializeDates?: boolean;
+  /** Convert Instant objects to ISO strings */
+  serializeInstants?: boolean;
+  /** Convert Duration objects to ISO strings */
+  serializeDurations?: boolean;
   /** Indentation for pretty printing */
   space?: string | number;
   /** Quote object keys even if not required */
@@ -55,7 +69,10 @@ enum TokenType {
   String = "String",
   Number = "Number",
   BigInt = "BigInt",
-  Date = "Date",
+  Decimal = "Decimal",
+  Instant = "Instant",
+  Duration = "Duration",
+  UUID = "UUID",
   True = "True",
   False = "False",
   Null = "Null",
@@ -81,7 +98,8 @@ class KJsonTokenizer {
       allowTrailingCommas: options.allowTrailingCommas ?? true,
       allowComments: options.allowComments ?? true,
       allowUnquotedKeys: options.allowUnquotedKeys ?? true,
-      parseDates: options.parseDates ?? true,
+      parseInstants: options.parseInstants ?? true,
+      parseDurations: options.parseDurations ?? true,
     };
   }
 
@@ -124,18 +142,35 @@ class KJsonTokenizer {
           break;
         case '"':
         case "'":
+        case '`':
           yield this.parseString();
           break;
         default:
           if (this.isDigit(char) || char === "-") {
-            // Check if this might be a date literal (starts with 4 digits and dash)
-            if (this.options.parseDates && this.looksLikeDateStart()) {
-              yield this.parseDate();
+            // Check if this might be a UUID (8 hex digits followed by dash)
+            const savedPos = this.position;
+            if (this.mightBeUUID()) {
+              const uuid = this.tryParseCompleteUUID();
+              if (uuid) {
+                yield { type: TokenType.UUID, value: uuid, position: savedPos };
+                break;
+              }
+              this.position = savedPos;
+            }
+            
+            // Check if this might be an instant literal (starts with 4 digits and dash)
+            if (this.options.parseInstants && this.looksLikeDateStart()) {
+              yield this.parseInstant();
             } else {
               yield this.parseNumber();
             }
-          } else if (this.isIdentifierStart(char)) {
-            yield this.parseIdentifier();
+          } else if (this.isIdentifierStart(char) || char === 'P') {
+            // P could be start of duration like PT1H or identifier
+            if (char === 'P' && this.options.parseDurations && this.looksLikeDuration()) {
+              yield this.parseDuration();
+            } else {
+              yield this.parseIdentifier();
+            }
           } else {
             throw new Error(`Unexpected character '${char}' at position ${this.position}`);
           }
@@ -206,6 +241,7 @@ class KJsonTokenizer {
         switch (escaped) {
           case '"':
           case "'":
+          case "`":
           case "\\":
           case "/":
             value += escaped;
@@ -300,12 +336,27 @@ class KJsonTokenizer {
       return { type: TokenType.BigInt, value, position: start };
     }
 
+    // Check for Decimal suffix
+    if (this.position < this.input.length && this.input[this.position] === "m") {
+      this.position++;
+      return { type: TokenType.Decimal, value, position: start };
+    }
+
     return { type: TokenType.Number, value, position: start };
   }
 
   private parseIdentifier(): Token {
     const start = this.position;
     let value = "";
+
+    // First, try to parse as a UUID
+    const savedPos = this.position;
+    const uuid = this.tryParseCompleteUUID();
+    if (uuid) {
+      return { type: TokenType.UUID, value: uuid, position: start };
+    }
+    // Reset position if not a valid UUID
+    this.position = savedPos;
 
     while (
       this.position < this.input.length &&
@@ -342,10 +393,43 @@ class KJsonTokenizer {
     return /[a-zA-Z0-9_$]/.test(char);
   }
 
-  private isISODateString(value: string): boolean {
-    // ISO 8601 date format: YYYY-MM-DDTHH:mm:ss.sssZ or YYYY-MM-DDTHH:mm:ss.sss+/-HH:mm
-    const isoDateRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?([+-]\d{2}:\d{2}|Z)$/;
-    return isoDateRegex.test(value) && !isNaN(Date.parse(value));
+  private isISOInstantString(value: string): boolean {
+    // ISO 8601 instant format: YYYY-MM-DDTHH:mm:ss.sssZ or YYYY-MM-DDTHH:mm:ss.sss+/-HH:mm
+    const isoInstantRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2}|Z)$/;
+    if (!isoInstantRegex.test(value)) {
+      return false;
+    }
+    
+    try {
+      Instant.from(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private isISODurationString(value: string): boolean {
+    // ISO 8601 duration format: P[nD]T[nH][nM][nS] or variations
+    const isoDurationRegex = /^P(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/;
+    if (!isoDurationRegex.test(value)) {
+      return false;
+    }
+    
+    try {
+      Duration.from(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private looksLikeDuration(): boolean {
+    // Check if the next characters look like P followed by duration components
+    if (this.position + 1 >= this.input.length) return false;
+    
+    // Look ahead for PT or P followed by digits and D
+    const peek = this.input.slice(this.position, this.position + 10);
+    return /^P(?:\d+D)?T?/.test(peek);
   }
 
   private looksLikeDateStart(): boolean {
@@ -356,7 +440,7 @@ class KJsonTokenizer {
     return /^\d{4}-\d{2}-\d{2}/.test(peek);
   }
 
-  private parseDate(): Token {
+  private parseInstant(): Token {
     const start = this.position;
     let value = "";
 
@@ -373,14 +457,109 @@ class KJsonTokenizer {
       this.position++;
     }
 
-    // Validate that this is actually a valid ISO date
-    if (this.isISODateString(value)) {
-      return { type: TokenType.Date, value, position: start };
+    // Validate that this is actually a valid ISO instant
+    if (this.options.parseInstants && this.isISOInstantString(value)) {
+      return { type: TokenType.Instant, value, position: start };
     } else {
-      // If it's not a valid date, reset position and parse as identifier/number
+      // If it's not a valid instant, reset position and parse as identifier/number
       this.position = start;
       return this.parseIdentifier();
     }
+  }
+
+  private parseDuration(): Token {
+    const start = this.position;
+    let value = "";
+
+    // Parse until we hit a delimiter (whitespace, comma, bracket, etc.)
+    while (this.position < this.input.length) {
+      const char = this.input[this.position];
+      
+      // Stop at delimiters
+      if (/[\s,\]\}]/.test(char)) {
+        break;
+      }
+      
+      value += char;
+      this.position++;
+    }
+
+    // Validate that this is actually a valid ISO duration
+    if (this.options.parseDurations && this.isISODurationString(value)) {
+      return { type: TokenType.Duration, value, position: start };
+    } else {
+      // If it's not a valid duration, reset position and parse as identifier
+      this.position = start;
+      return this.parseIdentifier();
+    }
+  }
+
+  private mightBeUUID(): boolean {
+    // Look ahead to see if this could be a UUID
+    // UUIDs start with 8 hex chars followed by a dash
+    const saved = this.position;
+    let count = 0;
+    
+    while (this.position < this.input.length && count < 8) {
+      const char = this.input[this.position];
+      if (!/[0-9a-fA-F]/.test(char)) {
+        this.position = saved;
+        return false;
+      }
+      this.position++;
+      count++;
+    }
+    
+    const hasFirstDash = this.position < this.input.length && this.input[this.position] === '-';
+    this.position = saved;
+    return hasFirstDash;
+  }
+
+  private tryParseCompleteUUID(): string | null {
+    const saved = this.position;
+    let uuid = "";
+    const parts: string[] = [];
+    const expectedLengths = [8, 4, 4, 4, 12];
+    
+    for (let i = 0; i < expectedLengths.length; i++) {
+      if (i > 0) {
+        // Expect a dash between parts
+        if (this.position >= this.input.length || this.input[this.position] !== '-') {
+          this.position = saved;
+          return null;
+        }
+        uuid += '-';
+        this.position++;
+      }
+      
+      let part = "";
+      for (let j = 0; j < expectedLengths[i]; j++) {
+        if (this.position >= this.input.length) {
+          this.position = saved;
+          return null;
+        }
+        const char = this.input[this.position];
+        if (!/[0-9a-fA-F]/.test(char)) {
+          this.position = saved;
+          return null;
+        }
+        part += char;
+        this.position++;
+      }
+      parts.push(part);
+      uuid += part;
+    }
+    
+    // Verify we're at a word boundary
+    if (this.position < this.input.length) {
+      const nextChar = this.input[this.position];
+      if (this.isIdentifierPart(nextChar) && nextChar !== '-') {
+        this.position = saved;
+        return null;
+      }
+    }
+    
+    return uuid;
   }
 }
 
@@ -395,7 +574,8 @@ class KJsonParser {
       allowTrailingCommas: options.allowTrailingCommas ?? true,
       allowComments: options.allowComments ?? true,
       allowUnquotedKeys: options.allowUnquotedKeys ?? true,
-      parseDates: options.parseDates ?? true,
+      parseInstants: options.parseInstants ?? true,
+      parseDurations: options.parseDurations ?? true,
     };
   }
 
@@ -426,9 +606,18 @@ class KJsonParser {
       case TokenType.BigInt:
         this.advance();
         return BigInt(token.value);
-      case TokenType.Date:
+      case TokenType.Decimal:
         this.advance();
-        return new Date(token.value);
+        return new Decimal128(token.value);
+      case TokenType.Instant:
+        this.advance();
+        return Instant.from(token.value);
+      case TokenType.Duration:
+        this.advance();
+        return Duration.from(token.value);
+      case TokenType.UUID:
+        this.advance();
+        return new UUID(token.value);
       case TokenType.True:
         this.advance();
         return true;
@@ -474,6 +663,7 @@ class KJsonParser {
 
       // Parse value
       const value = this.parseValue();
+
       obj[key] = value;
 
       const nextToken = this.currentToken();
@@ -552,6 +742,7 @@ class KJsonParser {
     }
     this.advance();
   }
+
 }
 
 /**
@@ -576,13 +767,62 @@ export function parse(text: string, options: KJsonParseOptions = {}): any {
 export function stringify(value: any, options: KJsonStringifyOptions = {}): string {
   const opts = {
     bigintSuffix: options.bigintSuffix ?? true,
-    serializeDates: options.serializeDates ?? true,
+    serializeInstants: options.serializeInstants ?? true,
+    serializeDurations: options.serializeDurations ?? true,
     space: options.space ?? 0,
     quoteKeys: options.quoteKeys ?? false,
   };
 
   const indent = typeof opts.space === "number" ? " ".repeat(opts.space) : opts.space;
   let indentLevel = 0;
+
+  function stringifyString(str: string): string {
+    // Count occurrences of each quote type
+    const singleQuotes = (str.match(/'/g) || []).length;
+    const doubleQuotes = (str.match(/"/g) || []).length;
+    const backticks = (str.match(/`/g) || []).length;
+    
+    // Calculate escaping cost for each quote type
+    // Cost = quotes that need escaping + backslashes that need escaping
+    const backslashes = (str.match(/\\/g) || []).length;
+    
+    const singleCost = singleQuotes + backslashes;
+    const doubleCost = doubleQuotes + backslashes;
+    const backtickCost = backticks + backslashes;
+    
+    // Find the minimum cost
+    const minCost = Math.min(singleCost, doubleCost, backtickCost);
+    
+    // Choose quote type: in case of tie, prefer single > double > backtick
+    let quoteChar: string;
+    if (singleCost === minCost) {
+      quoteChar = "'";
+    } else if (doubleCost === minCost) {
+      quoteChar = '"';
+    } else {
+      quoteChar = '`';
+    }
+    
+    // Escape the string for the chosen quote type
+    let escaped = str
+      .replace(/\\/g, '\\\\')  // Escape backslashes first
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\t/g, '\\t')
+      .replace(/\b/g, '\\b')
+      .replace(/\f/g, '\\f');
+    
+    // Escape the chosen quote character
+    if (quoteChar === "'") {
+      escaped = escaped.replace(/'/g, "\\\'" );
+    } else if (quoteChar === '"') {
+      escaped = escaped.replace(/"/g, '\\\"');
+    } else { // backtick
+      escaped = escaped.replace(/`/g, '\\\\`');
+    }
+    
+    return quoteChar + escaped + quoteChar;
+  }
 
   function stringifyValue(val: any): string {
     if (val === null) return "null";
@@ -596,10 +836,25 @@ export function stringify(value: any, options: KJsonStringifyOptions = {}): stri
       return opts.bigintSuffix ? `${val.toString()}n` : val.toString();
     }
     if (typeof val === "string") {
-      return JSON.stringify(val);
+      return stringifyString(val);
+    }
+    if (isInstant(val)) {
+      return opts.serializeInstants ? val.toString() : JSON.stringify(val.toString());
+    }
+    if (isDuration(val)) {
+      return opts.serializeDurations ? val.toString() : JSON.stringify(val.toString());
+    }
+    if (isUUID(val)) {
+      // Serialize UUID as unquoted string
+      return val.toString();
+    }
+    if (isDecimal128(val)) {
+      // Serialize Decimal128 with 'm' suffix
+      return val.toStringWithSuffix();
     }
     if (val instanceof Date) {
-      return opts.serializeDates ? val.toISOString() : JSON.stringify(val);
+      // Legacy Date support - convert to Instant
+      return opts.serializeInstants ? Instant.fromEpochMilliseconds(val.getTime()).toString() : JSON.stringify(val.toISOString());
     }
     if (Array.isArray(val)) {
       return stringifyArray(val);
@@ -613,16 +868,15 @@ export function stringify(value: any, options: KJsonStringifyOptions = {}): stri
   function stringifyArray(arr: any[]): string {
     if (arr.length === 0) return "[]";
 
+    indentLevel++;
     const items = arr.map(item => {
-      const currentIndent = indent ? "\n" + indent.repeat(indentLevel + 1) : "";
+      const currentIndent = indent ? "\n" + indent.repeat(indentLevel) : "";
       const itemStr = stringifyValue(item);
       return currentIndent + itemStr;
     });
-
-    indentLevel++;
-    const result = items.join(",");
     indentLevel--;
 
+    const result = items.join(",");
     const closeIndent = indent ? "\n" + indent.repeat(indentLevel) : "";
     return `[${result}${closeIndent}]`;
   }
@@ -631,25 +885,25 @@ export function stringify(value: any, options: KJsonStringifyOptions = {}): stri
     const keys = Object.keys(obj);
     if (keys.length === 0) return "{}";
 
+    indentLevel++;
     const pairs = keys.map(key => {
-      const currentIndent = indent ? "\n" + indent.repeat(indentLevel + 1) : "";
+      const currentIndent = indent ? "\n" + indent.repeat(indentLevel) : "";
       const keyStr = shouldQuoteKey(key) || opts.quoteKeys ? JSON.stringify(key) : key;
       const valueStr = stringifyValue(obj[key]);
       const separator = indent ? ": " : ":";
       return `${currentIndent}${keyStr}${separator}${valueStr}`;
     });
-
-    indentLevel++;
-    const result = pairs.join(",");
     indentLevel--;
 
+    const result = pairs.join(",");
     const closeIndent = indent ? "\n" + indent.repeat(indentLevel) : "";
     return `{${result}${closeIndent}}`;
   }
 
   function shouldQuoteKey(key: string): boolean {
-    // Quote if it contains special characters or starts with a number
-    return !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key);
+    // Quote if it contains special characters, starts with a number, or is a reserved word
+    const reserved = ['true', 'false', 'null', 'undefined'];
+    return !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key) || reserved.includes(key);
   }
 
   return stringifyValue(value);
@@ -706,6 +960,16 @@ export const kJSON: {
     return (value: any) => stringify(value, options);
   }
 };
+
+/**
+ * Re-export streaming functionality
+ */
+export * from "./stream.ts";
+
+/**
+ * Re-export binary format functionality
+ */
+export * from "./binary.ts";
 
 /**
  * Default export for convenience

@@ -1,0 +1,64 @@
+// Basic kJSON test file
+// Tests standard JSON types and basic kJSON features
+
+{
+  // Null and boolean values
+  nullValue: null,
+  trueValue: true,
+  falseValue: false,
+  
+  // Number types
+  integer: 42,
+  negative: -123,
+  float: 3.14159,
+  scientific: 6.022e23,
+  
+  // String types
+  emptyString: "",
+  simpleString: "Hello, World!",
+  unicodeString: "Hello, 世界! 🌍",
+  escapedString: "Line 1\nLine 2\tTabbed\r\n\"Quoted\"",
+  singleQuoted: 'Single quoted string',
+  
+  // Arrays
+  emptyArray: [],
+  numberArray: [1, 2, 3, 4, 5],
+  mixedArray: [
+    null,
+    true,
+    42,
+    "string",
+    [1, 2, 3],
+    {nested: "object"},
+  ],
+  
+  // Objects
+  emptyObject: {},
+  nestedObject: {
+    level1: {
+      level2: {
+        level3: {
+          value: "deep"
+        }
+      }
+    }
+  },
+  
+  // JSON5 features
+  unquotedKeys: {
+    simple: 1,
+    with_underscore: 2,
+    $dollarSign: 3,
+    camelCase: 4,
+  },
+  
+  // Trailing commas
+  trailingCommas: {
+    inObject: true,
+    inArray: [
+      1,
+      2,
+      3,
+    ],
+  },
+}

@@ -144,11 +144,51 @@ Deno.test("kJSON - Multi-line comments", () => {
 });
 
 Deno.test("kJSON - Mixed quote styles", () => {
-  const jsonStr = `{single: 'value', double: "value2"}`;
+  const jsonStr = `{single: 'value', double: "value2", backtick: \`template\`}`;
   const parsed = parse(jsonStr);
   
   assertEquals(parsed.single, "value");
   assertEquals(parsed.double, "value2");
+  assertEquals(parsed.backtick, "template");
+});
+
+Deno.test("kJSON - Backtick strings with quotes inside", () => {
+  const input = `{text: \`He said "Hello" and she replied 'Hi'\`}`;
+  const result = parse(input);
+  
+  assertEquals(result.text, `He said "Hello" and she replied 'Hi'`);
+});
+
+Deno.test("kJSON - Multiline backtick strings", () => {
+  const input = `{
+    text: \`Line 1
+Line 2
+Line 3\`
+  }`;
+  const result = parse(input);
+  
+  assertEquals(result.text, "Line 1\nLine 2\nLine 3");
+});
+
+Deno.test("kJSON - Escaped backticks", () => {
+  const input = `{text: \`This has a \\\` backtick\`}`;
+  const result = parse(input);
+  
+  assertEquals(result.text, "This has a ` backtick");
+});
+
+Deno.test("kJSON - Smart quote selection in stringify", () => {
+  // No quotes - should use single quotes (default)
+  assertEquals(stringify({text: "hello"}), `{text: 'hello'}`);
+  
+  // Has single quotes - should use double quotes
+  assertEquals(stringify({text: "it's nice"}), `{text: "it's nice"}`);
+  
+  // Has double quotes - should use single quotes
+  assertEquals(stringify({text: 'He said "hi"'}), `{text: 'He said "hi"'}`);
+  
+  // Has both single and double - should use backticks
+  assertEquals(stringify({text: `He said "hello" and 'hi'`}), `{text: \`He said "hello" and 'hi'\`}`);
 });
 
 Deno.test("kJSON - Special values", () => {
@@ -273,6 +313,11 @@ Deno.test("kJSON - kJSON.isValid", () => {
   assertEquals(kJSON.isValid('{ invalid json }'), false);
   assertEquals(kJSON.isValid('{ value: 42n }'), true);
   assertEquals(kJSON.isValid('{ date: 2025-01-01T00:00:00.000Z }'), true);
+  
+  // Test with Temporal.Instant if available
+  if (typeof Temporal !== 'undefined' && Temporal.Instant) {
+    assertEquals(kJSON.isValid('{ instant: 2025-01-01T00:00:00.000Z }', { parseTemporalInstants: true }), true);
+  }
 });
 
 Deno.test("kJSON - kJSON.safeParseWith", () => {
@@ -281,6 +326,12 @@ Deno.test("kJSON - kJSON.safeParseWith", () => {
   
   const result2 = kJSON.safeParseWith('{ invalid }', { default: true });
   assertEquals((result2 as any).default, true);
+  
+  // Test with Temporal.Instant if available
+  if (typeof Temporal !== 'undefined' && Temporal.Instant) {
+    const result3 = kJSON.safeParseWith('{ instant: 2025-01-01T00:00:00.000Z }', { default: true }, { parseTemporalInstants: true });
+    assertEquals((result3 as any).instant instanceof Temporal.Instant, true);
+  }
 });
 
 Deno.test("kJSON - kJSON.createParser", () => {
@@ -296,6 +347,17 @@ Deno.test("kJSON - kJSON.createParser", () => {
   assertThrows(() => {
     strictParser('{name: "test"}');
   });
+  
+  // Test with Temporal.Instant if available
+  if (typeof Temporal !== 'undefined' && Temporal.Instant) {
+    const temporalParser = kJSON.createParser({
+      parseTemporalInstants: true,
+      parseDates: false
+    });
+    
+    const result2 = temporalParser('{ instant: 2025-01-01T00:00:00.000Z }');
+    assertEquals(result2.instant instanceof Temporal.Instant, true);
+  }
 });
 
 Deno.test("kJSON - kJSON.createStringifier", () => {
@@ -309,6 +371,21 @@ Deno.test("kJSON - kJSON.createStringifier", () => {
   
   assertEquals(parsed.name, "test");
   assertEquals(typeof parsed.value, "bigint");
+  
+  // Test with Temporal.Instant if available
+  if (typeof Temporal !== 'undefined' && Temporal.Instant) {
+    const temporalStringifier = kJSON.createStringifier({
+      serializeTemporalInstants: true,
+      space: 2
+    });
+    
+    const instant = Temporal.Instant.from("2025-01-01T00:00:00.000Z");
+    const json2 = temporalStringifier({ instant: instant });
+    const parsed2 = parse(json2, { parseTemporalInstants: true });
+    
+    assertEquals(parsed2.instant instanceof Temporal.Instant, true);
+    assertEquals(parsed2.instant.equals(instant), true);
+  }
 });
 
 Deno.test("kJSON - Round-trip consistency", () => {
@@ -335,6 +412,244 @@ Deno.test("kJSON - Round-trip consistency", () => {
   assertEquals(typeof parsed.obj, "object");
   assertEquals(Array.isArray(parsed.arr), true);
   assertEquals(typeof parsed.arr[1], "bigint");
+});
+
+// Temporal.Instant tests (requires --unstable-temporal)
+Deno.test("kJSON - Temporal.Instant support", () => {
+  // Skip test if Temporal is not available
+  if (typeof Temporal === 'undefined' || !Temporal.Instant) {
+    console.log("Skipping Temporal.Instant test - Temporal API not available");
+    return;
+  }
+
+  const instant = Temporal.Instant.from("2025-01-01T00:00:00.000Z");
+  const input = {
+    created: instant,
+    updated: Temporal.Instant.from("2025-12-31T23:59:59.999Z")
+  };
+  
+  const json = stringify(input, { serializeTemporalInstants: true });
+  const parsed = parse(json, { parseTemporalInstants: true });
+  
+  assertEquals(parsed.created instanceof Temporal.Instant, true);
+  assertEquals(parsed.created.equals(instant), true);
+  assertEquals(parsed.updated instanceof Temporal.Instant, true);
+});
+
+Deno.test("kJSON - Temporal.Instant vs Date distinction", () => {
+  // Skip test if Temporal is not available
+  if (typeof Temporal === 'undefined' || !Temporal.Instant) {
+    console.log("Skipping Temporal.Instant test - Temporal API not available");
+    return;
+  }
+
+  const instant = Temporal.Instant.from("2025-01-01T00:00:00.000Z");
+  const date = new Date("2025-01-01T00:00:00.000Z");
+  const input = {
+    instant: instant,
+    date: date,
+    instantString: "2025-01-01T00:00:00.000Z",
+    description: "This is a timestamp: 2025-01-01T00:00:00.000Z"
+  };
+  
+  // Test separate parsing modes for round-trip consistency
+  const jsonTemporal = stringify(input, { serializeTemporalInstants: true, serializeDates: false });
+  const parsedTemporal = parse(jsonTemporal, { parseTemporalInstants: true, parseDates: false });
+  
+  assertEquals(parsedTemporal.instant instanceof Temporal.Instant, true);
+  assertEquals(typeof parsedTemporal.date, "string"); // Date serialized as quoted string
+  assertEquals(typeof parsedTemporal.instantString, "string");
+  assertEquals(typeof parsedTemporal.description, "string");
+  
+  const jsonDate = stringify(input, { serializeTemporalInstants: false, serializeDates: true });
+  const parsedDate = parse(jsonDate, { parseTemporalInstants: false, parseDates: true });
+  
+  assertEquals(typeof parsedDate.instant, "string"); // Temporal.Instant serialized as quoted string
+  assertEquals(parsedDate.date instanceof Date, true);
+  assertEquals(typeof parsedDate.instantString, "string");
+  assertEquals(typeof parsedDate.description, "string");
+});
+
+Deno.test("kJSON - Temporal.Instant preference over Date", () => {
+  // Skip test if Temporal is not available
+  if (typeof Temporal === 'undefined' || !Temporal.Instant) {
+    console.log("Skipping Temporal.Instant test - Temporal API not available");
+    return;
+  }
+
+  const isoString = "2025-01-01T00:00:00.000Z";
+  const jsonStr = `{ timestamp: ${isoString} }`;
+  
+  // When both parseTemporalInstants and parseDates are true, Temporal.Instant should take precedence
+  const parsed = parse(jsonStr, { parseTemporalInstants: true, parseDates: true });
+  
+  assertEquals(parsed.timestamp instanceof Temporal.Instant, true);
+  assertEquals(parsed.timestamp instanceof Date, false);
+});
+
+Deno.test("kJSON - Temporal.Instant various formats", () => {
+  // Skip test if Temporal is not available
+  if (typeof Temporal === 'undefined' || !Temporal.Instant) {
+    console.log("Skipping Temporal.Instant test - Temporal API not available");
+    return;
+  }
+
+  const formats = [
+    "2025-01-01T00:00:00.000Z",
+    "2025-01-01T00:00:00Z",
+    "2025-01-01T00:00:00.123456789Z",
+    "2025-01-01T00:00:00+00:00",
+    "2025-01-01T12:30:45.123+05:30"
+  ];
+  
+  formats.forEach(format => {
+    const input = { timestamp: Temporal.Instant.from(format) };
+    const json = stringify(input, { serializeTemporalInstants: true });
+    const parsed = parse(json, { parseTemporalInstants: true });
+    
+    assertEquals(parsed.timestamp instanceof Temporal.Instant, true);
+    assertEquals(parsed.timestamp.equals(input.timestamp), true);
+  });
+});
+
+Deno.test("kJSON - Temporal.Instant in arrays", () => {
+  // Skip test if Temporal is not available
+  if (typeof Temporal === 'undefined' || !Temporal.Instant) {
+    console.log("Skipping Temporal.Instant test - Temporal API not available");
+    return;
+  }
+
+  const instants = [
+    Temporal.Instant.from("2025-01-01T00:00:00.000Z"),
+    Temporal.Instant.from("2025-02-01T00:00:00.000Z"),
+    Temporal.Instant.from("2025-03-01T00:00:00.000Z")
+  ];
+  
+  const json = stringify(instants, { serializeTemporalInstants: true });
+  const parsed = parse(json, { parseTemporalInstants: true });
+  
+  assertEquals(parsed.length, 3);
+  assertEquals(parsed[0] instanceof Temporal.Instant, true);
+  assertEquals(parsed[0].equals(instants[0]), true);
+  assertEquals(parsed[1].equals(instants[1]), true);
+  assertEquals(parsed[2].equals(instants[2]), true);
+});
+
+Deno.test("kJSON - Temporal.Instant serialization options", () => {
+  // Skip test if Temporal is not available
+  if (typeof Temporal === 'undefined' || !Temporal.Instant) {
+    console.log("Skipping Temporal.Instant test - Temporal API not available");
+    return;
+  }
+
+  const instant = Temporal.Instant.from("2025-01-01T00:00:00.000Z");
+  const input = { timestamp: instant };
+  
+  // With serializeTemporalInstants: true (default for new option)
+  const json1 = stringify(input, { serializeTemporalInstants: true });
+  const parsed1 = parse(json1, { parseTemporalInstants: true });
+  assertEquals(parsed1.timestamp instanceof Temporal.Instant, true);
+  
+  // With serializeTemporalInstants: false (should still work but as quoted string)
+  const json2 = stringify(input, { serializeTemporalInstants: false });
+  const parsed2 = parse(json2, { parseTemporalInstants: true });
+  assertEquals(typeof parsed2.timestamp, "string");
+  assertEquals(parsed2.timestamp, instant.toJSON());
+});
+
+Deno.test("kJSON - Mixed BigInt, Date, and Temporal.Instant", () => {
+  // Skip test if Temporal is not available
+  if (typeof Temporal === 'undefined' || !Temporal.Instant) {
+    console.log("Skipping Temporal.Instant test - Temporal API not available");
+    return;
+  }
+
+  const input = {
+    id: 12345n,
+    created: new Date("2025-01-01T00:00:00.000Z"),
+    updated: Temporal.Instant.from("2025-01-01T12:00:00.000Z"),
+    count: 42,
+    active: true
+  };
+  
+  // Test with Temporal.Instant parsing mode (both ISO strings will become Temporal.Instant)
+  const json = stringify(input, { 
+    bigintSuffix: true,
+    serializeDates: true,
+    serializeTemporalInstants: true
+  });
+  const parsed = parse(json, { 
+    parseDates: false,
+    parseTemporalInstants: true
+  });
+  
+  assertEquals(typeof parsed.id, "bigint");
+  assertEquals(parsed.created instanceof Temporal.Instant, true); // Date becomes Temporal.Instant
+  assertEquals(parsed.updated instanceof Temporal.Instant, true);
+  assertEquals(typeof parsed.count, "number");
+  assertEquals(typeof parsed.active, "boolean");
+});
+
+Deno.test("kJSON - Temporal.Instant disabled by default", () => {
+  // Skip test if Temporal is not available
+  if (typeof Temporal === 'undefined' || !Temporal.Instant) {
+    console.log("Skipping Temporal.Instant test - Temporal API not available");
+    return;
+  }
+
+  const isoString = "2025-01-01T00:00:00.000Z";
+  const jsonStr = `{ timestamp: ${isoString} }`;
+  
+  // Default parsing should not create Temporal.Instant
+  const parsed = parse(jsonStr);
+  assertEquals(parsed.timestamp instanceof Date, true);
+  assertEquals(parsed.timestamp instanceof Temporal.Instant, false);
+});
+
+Deno.test("kJSON - Complex nested with Temporal.Instant", () => {
+  // Skip test if Temporal is not available
+  if (typeof Temporal === 'undefined' || !Temporal.Instant) {
+    console.log("Skipping Temporal.Instant test - Temporal API not available");
+    return;
+  }
+
+  const input = {
+    metadata: {
+      id: 12345n,
+      created: Temporal.Instant.from("2025-01-01T00:00:00.000Z"),
+      version: "1.0"
+    },
+    events: [
+      { 
+        timestamp: Temporal.Instant.from("2025-01-01T10:00:00.000Z"), 
+        type: "start",
+        value: 100n 
+      },
+      { 
+        timestamp: Temporal.Instant.from("2025-01-01T11:00:00.000Z"), 
+        type: "update",
+        value: 200n 
+      }
+    ],
+    config: {
+      enabled: true,
+      maxRetries: 3
+    }
+  };
+  
+  const json = stringify(input, { 
+    bigintSuffix: true,
+    serializeTemporalInstants: true 
+  });
+  const parsed = parse(json, { 
+    parseTemporalInstants: true 
+  });
+  
+  assertEquals(typeof parsed.metadata.id, "bigint");
+  assertEquals(parsed.metadata.created instanceof Temporal.Instant, true);
+  assertEquals(parsed.events[0].timestamp instanceof Temporal.Instant, true);
+  assertEquals(typeof parsed.events[0].value, "bigint");
+  assertEquals(parsed.config.enabled, true);
 });
 
 Deno.test("kJSON - Performance baseline", () => {

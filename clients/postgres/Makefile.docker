@@ -1,0 +1,41 @@
+# Simplified Makefile for Docker builds
+PG_VERSION = 16
+PG_INCLUDE = /usr/include/postgresql/$(PG_VERSION)/server
+EXTENSION_DIR = /usr/share/postgresql/$(PG_VERSION)/extension
+LIB_DIR = /usr/lib/postgresql/$(PG_VERSION)/lib
+
+EXTENSION = kjson
+
+# Source files - using native implementation
+OBJS = src/kjson_io_native.o \
+       src/kjson_parser.o \
+       src/kjson_stringify.o \
+       src/kjson_binary.o \
+       src/kjson_ops.o \
+       src/kjson_casts.o \
+       src/kjson_utils.o
+
+CFLAGS = -std=c11    -Wall -Wmissing-prototypes -Wpointer-arith \
+         -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wformat-security \
+         -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation \
+         -g -O2 -fPIC -I$(PG_INCLUDE) -Isrc -I../c
+
+all: $(EXTENSION).so
+
+$(EXTENSION).so: $(OBJS)
+	gcc -shared -o $@ $^ -lm
+
+%.o: %.c
+	gcc $(CFLAGS) -c $< -o $@
+
+install: all
+	install -d $(EXTENSION_DIR)
+	install -d $(LIB_DIR)
+	install -m 644 kjson.control $(EXTENSION_DIR)/
+	install -m 644 sql/kjson--1.0.0.sql $(EXTENSION_DIR)/
+	install -m 755 kjson.so $(LIB_DIR)/
+
+clean:
+	rm -f $(OBJS) $(EXTENSION).so
+
+.PHONY: all install clean

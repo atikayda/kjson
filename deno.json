@@ -1,18 +1,19 @@
 {
   "name": "@atikayda/kjson",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "exports": "./mod.ts",
   "icon": "assets/kJSON.webp",
-  "description": "🎯 kJSON - Kind JSON parser with BigInt, Date & JSON5 support. Developer-friendly JSON parsing for modern JavaScript/TypeScript.",
+  "description": "🎯 kJSON - Kind JSON parser with BigInt, Date, Temporal.Instant & JSON5 support. Developer-friendly JSON parsing for modern JavaScript/TypeScript.",
   "license": "MIT",
   "repository": "https://github.com/atikayda/kjson",
   "homepage": "https://github.com/atikayda/kjson",
-  "keywords": ["json", "parser", "bigint", "date", "json5", "kind", "typescript"],
+  "keywords": ["json", "parser", "bigint", "date", "temporal", "json5", "kind", "typescript"],
   "tasks": {
-    "test": "deno test --allow-read --allow-write",
-    "bench": "deno bench --allow-read --allow-write",
-    "example": "deno run --allow-read --allow-write examples/demo.ts",
-    "check": "deno check mod.ts",
+    "test": "deno test --allow-read --allow-write --unstable-temporal --no-check",
+    "test-types": "deno test --allow-read --allow-write --unstable-temporal",
+    "bench": "deno bench --allow-read --allow-write --unstable-temporal",
+    "example": "deno run --allow-read --allow-write --unstable-temporal examples/demo.ts",
+    "check": "deno check --unstable-temporal mod.ts",
     "fmt": "deno fmt",
     "lint": "deno lint"
   },
@@ -22,7 +23,7 @@
   },
   "compilerOptions": {
     "strict": true,
-    "lib": ["deno.ns", "deno.worker", "dom"]
+    "lib": ["deno.ns", "deno.worker", "dom", "deno.unstable"]
   },
   "fmt": {
     "useTabs": false,

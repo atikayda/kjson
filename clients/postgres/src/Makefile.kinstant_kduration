@@ -1,0 +1,38 @@
+# Makefile for kInstant and kDuration PostgreSQL types
+# This builds the native nanosecond-precision temporal types
+
+MODULE_big = kinstant_kduration
+OBJS = kinstant.o kduration.o kinstant_kduration_ops.o
+
+EXTENSION = kinstant_kduration
+DATA = kinstant_kduration--1.0.sql
+
+# PostgreSQL configuration
+PG_CONFIG = pg_config
+PGXS := $(shell $(PG_CONFIG) --pgxs)
+include $(PGXS)
+
+# Build flags
+CFLAGS += -std=c99 -Wall -Wextra -Wmissing-prototypes -Wpointer-arith
+CFLAGS += -Wendif-labels -Wmissing-format-attribute -Wformat-security
+CFLAGS += -fno-strict-aliasing -fwrapv -fexcess-precision=standard
+CFLAGS += -O2 -g
+
+# Dependencies
+kinstant.o: kinstant.c
+kduration.o: kduration.c
+kinstant_kduration_ops.o: kinstant_kduration_ops.c
+
+# Install target
+install: all
+	$(INSTALL_DATA) kinstant_kduration.sql '$(DESTDIR)$(datadir)/extension/'
+
+# Clean target
+clean:
+	rm -f *.o *.so kinstant_kduration.sql
+
+# SQL file generation
+kinstant_kduration.sql: kinstant_kduration.sql.in
+	cp kinstant_kduration.sql.in kinstant_kduration.sql
+
+.PHONY: install clean

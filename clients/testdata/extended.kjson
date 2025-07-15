@@ -1,0 +1,87 @@
+// Extended kJSON test file
+// Tests all extended types: BigInt, UUID, Decimal128, Date
+
+{
+  // BigInt values
+  bigints: {
+    zero: 0n,
+    positive: 123456789012345678901234567890n,
+    negative: -987654321098765432109876543210n,
+    small: 42n,
+    // Maximum safe integer + 1
+    beyondSafe: 9007199254740992n,
+  },
+  
+  // UUID values (unquoted)
+  uuids: {
+    nil: 00000000-0000-0000-0000-000000000000,
+    v4_example: 550e8400-e29b-41d4-a716-446655440000,
+    v7_example: 01912d68-783e-7a03-8467-5661c1243ad4,
+    sequential: [
+      123e4567-e89b-12d3-a456-426614174000,
+      123e4567-e89b-12d3-a456-426614174001,
+      123e4567-e89b-12d3-a456-426614174002,
+    ],
+  },
+  
+  // Decimal128 values
+  decimals: {
+    zero: 0m,
+    integer: 123m,
+    simple: 123.45m,
+    negative: -67.89m,
+    tiny: 0.0000000000000000000000000000000001m,
+    huge: 99999999999999999999999999999999.99m,
+    precise: 1.2345678901234567890123456789012345m,
+  },
+  
+  // Date values (ISO 8601)
+  dates: {
+    epoch: 1970-01-01T00:00:00.000Z,
+    y2k: 2000-01-01T00:00:00.000Z,
+    current: 2025-01-15T10:30:45.123Z,
+    withOffset: 2025-01-15T10:30:45.123+05:30,
+    negativeOffset: 2025-01-15T10:30:45.123-08:00,
+    noMillis: 2025-01-15T10:30:45Z,
+  },
+  
+  // Mixed types in arrays
+  mixedArray: [
+    123n,                                    // BigInt
+    456.78m,                                 // Decimal128
+    550e8400-e29b-41d4-a716-446655440000,   // UUID
+    2025-01-01T00:00:00.000Z,               // Date
+    "regular string",                        // String
+    42,                                      // Number
+  ],
+  
+  // Nested with extended types
+  transaction: {
+    id: 01912d68-783e-7a03-8467-5661c1243ad4,
+    amount: 12345.67m,
+    fee: 0.01m,
+    blockHeight: 1234567890n,
+    timestamp: 2025-01-15T10:30:45.123Z,
+    metadata: {
+      network: "mainnet",
+      confirmations: 6n,
+    },
+  },
+  
+  // Edge cases
+  edgeCases: {
+    // String that looks like UUID (quoted)
+    notUuid: "550e8400-e29b-41d4-a716-446655440000",
+    // String that looks like date
+    notDate: "2025-01-01T00:00:00.000Z",
+    // String with n suffix
+    notBigint: "123n",
+    // String with m suffix
+    notDecimal: "123.45m",
+    // Actual types
+    actualUuid: 550e8400-e29b-41d4-a716-446655440000,
+    actualDate: 2025-01-01T00:00:00.000Z,
+    actualBigint: 123n,
+    actualDecimal: 123.45m,
+  },
+}

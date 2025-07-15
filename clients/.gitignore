@@ -1,0 +1,72 @@
+# Build artifacts
+*.o
+*.so
+*.a
+*.dylib
+*.dll
+*.exe
+*.out
+build/
+dist/
+target/
+
+# Language-specific
+
+## Go
+*.test
+vendor/
+go.sum
+
+## Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+*.egg
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+## Rust
+Cargo.lock
+/target/
+**/*.rs.bk
+
+## C/C++
+*.d
+*.slo
+*.lo
+*.obj
+*.gch
+*.pch
+*.lib
+*.exp
+*.ilk
+*.pdb
+
+## PostgreSQL
+*.sql~
+*.backup
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test artifacts
+*.kjsonb
+test-output/
+coverage/
+*.log
+
+# Dependencies
+node_modules/
+.cargo/
+pip-wheel-metadata/

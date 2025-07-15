@@ -1,0 +1,130 @@
+// This file contains various syntax errors for testing error handling
+// Each section is a separate test case - parsers should handle gracefully
+
+// Missing closing brace
+{
+  "incomplete": true,
+  "missing": "brace"
+
+
+// Missing closing bracket  
+[1, 2, 3
+
+
+// Unclosed string
+{
+  "unclosed": "this string never ends...
+
+
+// Invalid number formats
+{
+  "invalid1": 01234,      // Leading zeros not allowed
+  "invalid2": 1.2.3,      // Multiple decimal points
+  "invalid3": 1e2e3,      // Multiple exponents
+  "invalid4": +123,       // Plus sign not allowed
+  "invalid5": .123,       // Must start with digit
+  "invalid6": 123.,       // Must have digit after decimal
+}
+
+
+// Invalid escape sequences
+{
+  "bad_escape": "\x41",   // \x not valid
+  "bad_unicode": "\u123", // Incomplete unicode
+  "bad_quote": "unterminated \"
+}
+
+
+// Trailing commas where not allowed (strict JSON mode)
+[1, 2, 3,]  // When allowTrailingCommas: false
+
+
+// Comments where not allowed (strict JSON mode)
+{
+  // This comment is invalid when allowComments: false
+  "value": 123
+}
+
+
+// Unquoted keys where not allowed (strict JSON mode)
+{
+  unquoted: "not allowed"  // When allowUnquotedKeys: false
+}
+
+
+// Missing comma between values
+{
+  "a": 1
+  "b": 2
+}
+
+
+// Missing colon after key
+{
+  "key" "value"
+}
+
+
+// Extra comma
+{
+  "a": 1,
+  "b": 2,
+  ,
+  "c": 3
+}
+
+
+// Invalid BigInt
+{
+  "invalid_bigint": 123nn,    // Double n
+  "float_bigint": 123.45n,    // Decimal with n
+}
+
+
+// Invalid Decimal128
+{
+  "invalid_decimal": 123mm,   // Double m
+  "complex_decimal": 1+2im,   // Not a valid format
+}
+
+
+// Invalid UUID format
+{
+  "short": 550e8400-e29b-41d4-a716,              // Too short
+  "long": 550e8400-e29b-41d4-a716-446655440000-extra,  // Too long
+  "bad_hex": 550e8400-e29b-41d4-a716-44665544GGGG,     // Invalid hex
+  "wrong_format": 550e8400e29b41d4a716446655440000,     // Missing hyphens
+}
+
+
+// Invalid date format
+{
+  "bad_date1": 2025-13-01T00:00:00.000Z,        // Month 13
+  "bad_date2": 2025-01-32T00:00:00.000Z,        // Day 32
+  "bad_date3": 2025-01-01T25:00:00.000Z,        // Hour 25
+  "bad_date4": 2025-01-01T00:60:00.000Z,        // Minute 60
+  "bad_date5": 2025-01-01T00:00:60.000Z,        // Second 60
+  "partial": 2025-01-01T,                        // Incomplete
+}
+
+
+// Reserved words as unquoted keys (should be quoted)
+{
+  true: "value",
+  false: "value",
+  null: "value",
+}
+
+
+// Nested errors
+{
+  "outer": {
+    "inner": {
+      "broken": [
+        1,
+        2,
+        // Missing closing bracket
+      }
+    }
+  }
+}
