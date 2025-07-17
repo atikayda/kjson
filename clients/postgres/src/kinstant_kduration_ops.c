@@ -12,7 +12,6 @@
 #include "utils/memutils.h"
 #include <time.h>
 
-/* PG_MODULE_MAGIC is defined in kjson_io_native.c */
 
 /* Structure definitions (must match the ones in individual type files) */
 typedef struct {
@@ -47,10 +46,8 @@ kinstant_add_duration(PG_FUNCTION_ARGS)
     
     result = (kInstant *) palloc(sizeof(kInstant));
     
-    /* Start with original instant */
     result_nanoseconds = instant->nanoseconds;
     
-    /* Add duration components */
     if (duration->negative) {
         result_nanoseconds -= duration->nanoseconds;
         result_nanoseconds -= (int64_t)duration->minutes * 60LL * 1000000000LL;
@@ -89,7 +86,6 @@ kinstant_subtract_duration(PG_FUNCTION_ARGS)
     
     result = (kInstant *) palloc(sizeof(kInstant));
     
-    /* Start with original instant */
     result_nanoseconds = instant->nanoseconds;
     
     /* Subtract duration components (opposite sign logic) */
@@ -133,22 +129,17 @@ kinstant_subtract_instant(PG_FUNCTION_ARGS)
     
     result = (kDuration *) palloc0(sizeof(kDuration));
     
-    /* Convert both instants to UTC nanoseconds */
     a_utc = a->nanoseconds - ((int64_t)a->tz_offset * 60LL * 1000000000LL);
     b_utc = b->nanoseconds - ((int64_t)b->tz_offset * 60LL * 1000000000LL);
     
-    /* Calculate difference */
     diff_nanoseconds = a_utc - b_utc;
     
-    /* Handle negative differences */
     if (diff_nanoseconds < 0) {
         negative = true;
         diff_nanoseconds = -diff_nanoseconds;
     }
     
-    /* Convert nanoseconds to duration components */
-    /* For simplicity, we'll just store as nanoseconds */
-    /* A more sophisticated implementation would break down into larger units */
+    /* Store as nanoseconds - a more sophisticated implementation would break down into larger units */
     result->years = 0;
     result->months = 0;
     result->days = 0;
@@ -170,7 +161,6 @@ kinstant_extract_epoch(PG_FUNCTION_ARGS)
     kInstant *instant = (kInstant *) PG_GETARG_POINTER(0);
     double result;
     
-    /* Convert nanoseconds to seconds with fractional part */
     result = (double)instant->nanoseconds / 1000000000.0;
     
     PG_RETURN_FLOAT8(result);
@@ -188,7 +178,7 @@ kinstant_from_epoch(PG_FUNCTION_ARGS)
     
     result = (kInstant *) palloc(sizeof(kInstant));
     result->nanoseconds = (int64_t)(epoch_seconds * 1000000000.0);
-    result->tz_offset = 0; /* UTC */
+    result->tz_offset = 0;  /* UTC */
     result->reserved = 0;
     result->reserved2 = 0;
     

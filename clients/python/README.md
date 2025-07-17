@@ -1,13 +1,14 @@
 # kJSON Python Client
 
-Python implementation of the kJSON (Kind JSON) format with extended type support for BigInt, Decimal128, UUID, and Date types, plus JSON5 syntax features.
+Python implementation of the kJSON (Kind JSON) format with extended type support for BigInt, Decimal128, UUID, Instant, and Duration types, plus JSON5 syntax features.
 
 ## Features
 
 - 🔢 **BigInt Support** - Arbitrary precision integers with `n` suffix
 - 💰 **Decimal128** - High-precision decimals with `m` suffix  
 - 🆔 **UUID** - Native UUID type support (unquoted in JSON)
-- 📅 **Date** - ISO 8601 date/time with timezone support
+- ⏰ **Instant** - Nanosecond-precision timestamps in Zulu time (UTC)
+- ⏳ **Duration** - ISO 8601 duration format with nanosecond precision
 - 💬 **JSON5 Syntax** - Comments, unquoted keys, trailing commas, single quotes
 - 🐍 **Pythonic API** - Drop-in replacement for Python's `json` module
 - 🔄 **Round-trip Safe** - Preserves extended types through serialization
@@ -23,27 +24,31 @@ pip install -e .
 ## Quick Start
 
 ```python
-from kjson import loads, dumps, BigInt, Decimal128, Date, uuid_v4
+from kjson import loads, dumps, BigInt, Decimal128, Instant, Duration, uuid_v4
 
 # Parse kJSON with extended types
 data = loads('''{
     id: 550e8400-e29b-41d4-a716-446655440000,
     amount: 99999999999999999999999999n,
     price: 19.99m,
-    created: 2025-01-10T12:00:00Z,
+    created: 2025-01-10T12:00:00.123456789Z,
+    timeout: PT1H30M,
     // Comments are supported!
     active: true,
 }''')
 
 print(data['amount'])  # BigInt(99999999999999999999999999)
 print(data['price'])   # Decimal128('19.99')
+print(data['created']) # Instant with nanosecond precision
+print(data['timeout']) # Duration('PT1H30M')
 
 # Serialize with extended types
 result = {
     "id": uuid_v4(),
     "balance": BigInt("123456789012345678901234567890"),
     "rate": Decimal128("0.05"),
-    "timestamp": Date("2025-01-10T12:00:00Z")
+    "timestamp": Instant.now(),
+    "sessionTimeout": Duration.from_iso("PT2H")
 }
 
 print(dumps(result, indent=2))
@@ -114,25 +119,45 @@ result = loads("550e8400-e29b-41d4-a716-446655440000")
 print(type(result))  # <class 'uuid.UUID'>
 ```
 
-### Date
+### Instant
 
-ISO 8601 date/time with timezone support:
+Nanosecond-precision timestamps in Zulu time (UTC):
 
 ```python
-from kjson import Date, dumps, loads
+from kjson import Instant, dumps, loads
 from datetime import datetime, timezone
 
-# Create Date
-date1 = Date("2025-01-10T12:00:00Z")  # From ISO string
-date2 = Date(datetime.now(timezone.utc))  # From datetime
+# Create Instant
+instant1 = Instant.now()  # Current nanosecond timestamp
+instant2 = Instant.from_iso("2025-01-10T12:00:00.123456789Z")  # From ISO string
 
 # Serialize
-print(dumps(date1))  # "2025-01-10T12:00:00Z"
+print(dumps(instant1))  # "2025-01-10T12:00:00.123456789Z"
 
 # Parse
-result = loads("2025-01-10T12:00:00-08:00")
-print(type(result))  # <class 'kjson.types.Date'>
-print(result.to_iso8601())  # "2025-01-10T12:00:00-08:00"
+result = loads("2025-01-10T12:00:00.123456789Z")
+print(type(result))  # <class 'kjson.types.Instant'>
+print(result.to_iso8601())  # "2025-01-10T12:00:00.123456789Z"
+```
+
+### Duration
+
+ISO 8601 duration format with nanosecond precision:
+
+```python
+from kjson import Duration, dumps, loads
+
+# Create Duration
+duration1 = Duration.from_iso("PT2H30M")  # 2 hours 30 minutes
+duration2 = Duration.from_seconds(3600)  # 1 hour
+
+# Serialize
+print(dumps(duration1))  # "PT2H30M"
+
+# Parse
+result = loads("PT1H30M")
+print(type(result))  # <class 'kjson.types.Duration'>
+print(result.to_seconds())  # 5400.0
 ```
 
 ## JSON5 Features
@@ -206,7 +231,10 @@ dumps(obj: Any, **kwargs) -> str
 # Extended types
 BigInt(value: Union[int, str])
 Decimal128(value: Union[float, str])
-Date(value: Union[datetime, str], tz_offset: Optional[int] = None)
+Instant.now() -> Instant
+Instant.from_iso(iso_string: str) -> Instant
+Duration.from_iso(iso_string: str) -> Duration
+Duration.from_seconds(seconds: float) -> Duration
 
 # UUID generators
 uuid_v4() -> uuid.UUID
@@ -222,7 +250,7 @@ JSONDecoder(**kwargs)
 ### Financial Data
 
 ```python
-from kjson import loads, dumps, BigInt, Decimal128, Date
+from kjson import loads, dumps, BigInt, Decimal128, Instant, Duration
 
 transaction = {
     "id": "TX123456",
@@ -230,7 +258,8 @@ transaction = {
     "fee": Decimal128("0.01"),
     "gasUsed": BigInt("21000"),
     "blockNumber": BigInt("18500000"),
-    "timestamp": Date("2025-01-10T15:30:00Z")
+    "timestamp": Instant.now(),
+    "timeout": Duration.from_iso("PT5M")
 }
 
 # Serialize with pretty printing
@@ -267,7 +296,8 @@ original = {
     "id": uuid_v7(),
     "count": BigInt("999999999999999999"),
     "price": Decimal128("19.99"),
-    "updated": Date(datetime.now(timezone.utc))
+    "updated": Instant.now(),
+    "timeout": Duration.from_iso("PT1H")
 }
 
 # Serialize to kJSON
@@ -280,7 +310,8 @@ parsed = loads(kjson_str)
 assert isinstance(parsed["id"], uuid.UUID)
 assert isinstance(parsed["count"], BigInt)
 assert isinstance(parsed["price"], Decimal128)
-assert isinstance(parsed["updated"], Date)
+assert isinstance(parsed["updated"], Instant)
+assert isinstance(parsed["timeout"], Duration)
 ```
 
 ## Compatibility

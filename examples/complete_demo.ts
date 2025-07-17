@@ -202,7 +202,6 @@ console.log("Stringified kJSON (first 200 chars):");
 console.log(kjsonStr.slice(0, 200) + "...");
 console.log();
 
-// Parse the stringified kJSON
 let kjsonParsed;
 try {
   kjsonParsed = parse(kjsonStr);
@@ -236,7 +235,6 @@ Object.entries(allTypes).forEach(([key, value]) => {
   }
 });
 
-// Cleanup
 await Deno.remove(tempFile);
 
 console.log("\n=== Demo Complete ===");

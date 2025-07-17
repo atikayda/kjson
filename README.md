@@ -17,20 +17,36 @@
 
 **kJSON** is a powerful, developer-friendly JSON parser and stringifier with extended type support for Deno and modern JavaScript/TypeScript applications. It handles all the pain points of standard JSON while maintaining full compatibility.
 
+## 🌍 Multi-Language Support
+
+kJSON is available across multiple programming languages with consistent APIs:
+
+| Language | Status | Features | Documentation |
+|----------|--------|----------|---------------|
+| **TypeScript/Deno** | ✅ Production | Full feature set with Temporal API support | [Main README](README.md) |
+| **C** | ✅ Production | Full feature set with nanosecond precision | [C Client README](clients/c/README.md) |
+| **Python** | ✅ Production | Full feature set with datetime integration | [Python Client README](clients/python/README.md) |
+| **Rust** | ✅ Production | Full feature set with chrono integration | [Rust Client README](clients/rust/README.md) |
+| **Golang** | ✅ Production | Full feature set with time.Time integration | [Golang Client README](clients/golang/README.md) |
+| **PostgreSQL** | ✅ Production | Native types + unified temporal system | [PostgreSQL Client README](clients/postgres/README.md) |
+
+All clients support the same core features: **BigInt**, **Decimal128**, **UUID**, **Instant**, **Duration**, and **JSON5 syntax**.
+
 ## ✨ Why kJSON?
 
 Standard JSON is limiting. kJSON is **kind** to developers by supporting:
 
 - 🔢 **BigInt Values** - Handle large integers without precision loss
 - 💰 **Decimal128** - IEEE 754 decimal arithmetic for exact calculations (no 0.1 + 0.2 errors!)
-- 📅 **Date Objects** - Automatic ISO timestamp parsing
+- ⏰ **Nanosecond Instants** - Precise timestamps in Zulu time with nanosecond precision
+- ⏳ **ISO 8601 Durations** - Time spans with nanosecond precision (PT1H30M, P1DT2H3M4S)
 - 🆔 **UUID Support** - Parse and stringify UUIDs without quotes and serialization  
-- ⏰ **Temporal.Instant** - Modern temporal API support with nanosecond precision
 - 💬 **Comments** - Single-line and multi-line comments for self-documenting data
 - 🎯 **Flexible Syntax** - Unquoted keys, trailing commas, single quotes
 - 🛡️ **Type Safety** - Full TypeScript support with comprehensive type definitions
 - ⚡ **High Performance** - Optimized tokenizer with reasonable overhead
 - 🔄 **Drop-in Replacement** - Works with standard JSON out of the box
+- 🌐 **Cross-Platform** - Consistent API across TypeScript, C, Python, Rust, Golang, and PostgreSQL
 
 ## 🚀 Installation
 
@@ -55,16 +71,18 @@ const data = parse(`{
   balance: 1234567890123456789n,  // BigInt support
   creditLimit: 5000.00m,           // Decimal128 for exact money
   userId: 550e8400-e29b-41d4-a716-446655440000,  // UUID
-  lastLogin: 2025-01-15T10:30:00.000Z,  // Date parsing
+  lastLogin: 2025-01-15T10:30:00.123456789Z,  // Nanosecond instant
+  sessionTimeout: PT1H30M,         // ISO 8601 duration
   settings: {
     theme: 'dark',
     notifications: true,
   },  // trailing comma OK
 }`);
 
-console.log(typeof data.balance);    // "bigint"
-console.log(data.creditLimit);      // Decimal128 { value: "5000.00" }
-console.log(data.lastLogin instanceof Date); // true
+console.log(typeof data.balance);      // "bigint"
+console.log(data.creditLimit);        // Decimal128 { value: "5000.00" }
+console.log(data.lastLogin.toString()); // "2025-01-15T10:30:00.123456789Z"
+console.log(data.sessionTimeout.toString()); // "PT1H30M"
 ```
 
 ### Blockchain/Crypto Use Case
@@ -74,11 +92,14 @@ const blockData = parse(`{
   // Solana block data
   slot: 250845123n,
   blockTime: 1703635200000n,
+  timestamp: 2025-01-01T00:00:00.123456789Z,  // Nanosecond precision
+  processingTime: PT0.000000123S,             // Duration in nanoseconds
   transactions: [
     {
       signature: "5J7ZcvZ...",
       fee: 5000n,
-      timestamp: 2025-01-01T00:00:00.000Z,
+      executionTime: PT0.000045S,  // 45 microseconds
+      timestamp: 2025-01-01T00:00:00.123456789Z,
     }
   ],
   // Validator info
@@ -86,6 +107,7 @@ const blockData = parse(`{
 }`);
 
 console.log(blockData.slot);  // 250845123n (BigInt preserved)
+console.log(blockData.timestamp.epochNanoseconds); // nanosecond precision
 ```
 
 ### Financial/Trading Use Case
@@ -150,7 +172,7 @@ const message = stringify({
   type: "trade_update",
   tokenId: 987654321n,
   price: 0.00123456,
-  timestamp: new Date(),
+  timestamp: Instant.now(),
   volume24h: 1234567890123456789n,
   metadata: {
     exchange: "DEX",
@@ -178,8 +200,8 @@ Parse a kJSON string into a JavaScript value with full type preservation.
 - `allowTrailingCommas: boolean` - Allow trailing commas in objects and arrays (default: `true`)
 - `allowComments: boolean` - Allow `//` and `/* */` comments (default: `true`)
 - `allowUnquotedKeys: boolean` - Allow unquoted object keys (default: `true`)
-- `parseDates: boolean` - Parse ISO date strings as Date objects (default: `true`)
-- `parseTemporalInstants: boolean` - Parse ISO date strings as Temporal.Instant objects (default: `false`)
+- `parseInstants: boolean` - Parse ISO timestamp strings as Instant objects (default: `true`)
+- `parseDurations: boolean` - Parse ISO 8601 duration strings as Duration objects (default: `true`)
 
 **Returns:** `any` - The parsed JavaScript value with preserved types
 
@@ -187,7 +209,7 @@ Parse a kJSON string into a JavaScript value with full type preservation.
 const result = parse(`{
   name: "Alice",
   balance: 1234567890123456789n,  // BigInt preserved
-  lastLogin: 2025-01-15T10:30:00.000Z,  // Date object
+  lastLogin: 2025-01-15T10:30:00.123456789Z,  // Instant object
   // User preferences
   settings: {
     theme: 'dark',
@@ -197,12 +219,12 @@ const result = parse(`{
   allowTrailingCommas: true,
   allowComments: true,
   allowUnquotedKeys: true,
-  parseDates: true
+  parseInstants: true
 });
 
 // Types are preserved
 console.log(typeof result.balance);    // "bigint"
-console.log(result.lastLogin instanceof Date); // true
+console.log(result.lastLogin.toString()); // "2025-01-15T10:30:00.123456789Z"
 ```
 
 #### `stringify(value: any, options?: KJsonStringifyOptions): string`
@@ -215,8 +237,8 @@ Convert a JavaScript value to a kJSON string with intelligent formatting.
 
 **Options:**
 - `bigintSuffix: boolean` - Include BigInt values with 'n' suffix (default: `true`)
-- `serializeDates: boolean` - Convert Date objects to ISO strings (default: `true`)
-- `serializeTemporalInstants: boolean` - Convert Temporal.Instant objects to ISO strings (default: `false`)
+- `serializeInstants: boolean` - Convert Instant objects to ISO strings (default: `true`)
+- `serializeDurations: boolean` - Convert Duration objects to ISO 8601 strings (default: `true`)
 - `space: string | number` - Indentation for pretty printing (default: `0`)
 - `quoteKeys: boolean` - Quote all object keys (default: `false`)
 
@@ -225,22 +247,25 @@ Convert a JavaScript value to a kJSON string with intelligent formatting.
 ```typescript
 const json = stringify({
   userId: 12345n,
-  timestamp: new Date(),
+  timestamp: Instant.now(),
+  timeout: Duration.from("PT30M"),
   metadata: { 
     version: "1.0",
     active: true 
   }
 }, {
-  space: 2,           // Pretty print with 2 spaces
-  bigintSuffix: true, // Keep 'n' suffix for BigInt
-  serializeDates: true, // Dates as ISO strings
-  quoteKeys: false    // Clean unquoted keys
+  space: 2,             // Pretty print with 2 spaces
+  bigintSuffix: true,   // Keep 'n' suffix for BigInt
+  serializeInstants: true, // Instants as ISO strings
+  serializeDurations: true, // Durations as ISO 8601 strings
+  quoteKeys: false      // Clean unquoted keys
 });
 
 // Output:
 // {
 //   userId: 12345n,
-//   timestamp: 2025-01-15T10:30:00.000Z,
+//   timestamp: 2025-01-15T10:30:00.123456789Z,
+//   timeout: PT30M,
 //   metadata: {
 //     version: "1.0",
 //     active: true
@@ -344,8 +369,8 @@ console.log(compactStringifier(data)); // Compact
 |------|-------------|---------|---------|
 | `bigint` | Large integers with `n` suffix | `123456789012345678901234567890n` | No precision loss |
 | `Decimal128` | IEEE 754 decimals with `m` suffix | `99.99m`, `0.1m` | Exact decimal arithmetic |
-| `Date` | ISO timestamp literals | `2025-01-01T00:00:00.000Z` | Automatic parsing |
-| `Temporal.Instant` | Modern temporal objects with nanosecond precision | `2025-01-01T00:00:00.123456789Z` | Precise timestamps |
+| `Instant` | Nanosecond-precision timestamps in Zulu time | `2025-01-01T00:00:00.123456789Z` | Precise timestamps |
+| `Duration` | ISO 8601 duration strings with nanosecond precision | `PT1H30M`, `PT0.000000123S` | Time span representation |
 | `UUID` | Unquoted UUID literals | `550e8400-e29b-41d4-a716-446655440000` | Native UUID support |
 | `undefined` | Undefined values | `undefined` | JavaScript compatibility |
 
@@ -412,99 +437,120 @@ stringify({text: 'He said "hi"'});     // {text: 'He said "hi"'}
 stringify({text: `Mix 'both' "types"`}); // {text: \`Mix 'both' "types"\`}
 ```
 
-### ⏰ Temporal.Instant Support (Experimental)
+### ⏰ Instant & Duration Support
 
-kJSON supports the modern Temporal API when available in Deno with the `--unstable-temporal` flag.
+kJSON provides comprehensive support for nanosecond-precision timestamps (Instant) and time spans (Duration) with compatibility for both Temporal API and custom polyfills.
 
 #### Requirements
-- Deno with `--unstable-temporal` flag
-- Import kJSON in an environment where `Temporal` is available
+- Works with any Deno version
+- Uses Temporal API when available, falls back to compatible polyfills
+- Supports nanosecond precision in all environments
 
 #### Basic Usage
 ```typescript
-import { parse, stringify } from "jsr:@atikayda/kjson";
+import { parse, stringify, Instant, Duration } from "jsr:@atikayda/kjson";
 
-// Enable Temporal.Instant parsing
+// Parse timestamps and durations
 const data = parse(`{
   created: 2025-01-01T10:00:00.000Z,
   updated: 2025-01-01T12:30:45.123456789Z,  // Nanosecond precision
-  timezone_aware: 2025-01-01T15:30:00+05:30
+  timezone_aware: 2025-01-01T15:30:00+05:30, // Converted to Zulu time
+  sessionTimeout: PT1H30M,                  // 1 hour 30 minutes
+  processingTime: PT0.000000123S            // 123 nanoseconds
 }`, {
-  parseTemporalInstants: true
+  parseInstants: true,
+  parseDurations: true
 });
 
-console.log(data.created instanceof Temporal.Instant); // true
+console.log(data.created.toString()); // "2025-01-01T10:00:00Z"
 console.log(data.updated.toString()); // "2025-01-01T12:30:45.123456789Z"
+console.log(data.sessionTimeout.toString()); // "PT1H30M"
+```
+
+#### Creating Instants and Durations
+```typescript
+// Create from current time
+const now = Instant.now();
+console.log(now.toString()); // "2025-01-15T10:30:00.123456789Z"
+
+// Create from epoch values
+const instant = Instant.fromEpochNanoseconds(1642687200000000000n);
+const millis = Instant.fromEpochMilliseconds(1642687200000);
+
+// Create durations
+const duration = Duration.from("PT1H30M");        // 1 hour 30 minutes
+const nanoseconds = Duration.from("PT0.000000123S"); // 123 nanoseconds
+const custom = Duration.from({ hours: 2, minutes: 30 });
 ```
 
 #### Serialization
 ```typescript
-const instant = Temporal.Instant.from("2025-01-01T00:00:00.000Z");
+const instant = Instant.now();
+const duration = Duration.from("PT2H30M");
+
 const json = stringify({
   timestamp: instant,
+  timeout: duration,
   event: "system_start"
 }, {
-  serializeTemporalInstants: true
+  serializeInstants: true,
+  serializeDurations: true
 });
 
-// Output: { timestamp: 2025-01-01T00:00:00Z, event: "system_start" }
+// Output: { timestamp: 2025-01-15T10:30:00.123456789Z, timeout: PT2H30M, event: "system_start" }
 ```
 
 #### Precision & Formats
 ```typescript
 // Supports various ISO 8601 formats
-const formats = [
+const instantFormats = [
   "2025-01-01T00:00:00.000Z",           // Milliseconds
   "2025-01-01T00:00:00.123456789Z",    // Nanoseconds
   "2025-01-01T00:00:00+00:00",         // Timezone offset
-  "2025-01-01T12:30:45.123+05:30"     // Regional timezone
+  "2025-01-01T12:30:45.123+05:30"     // Regional timezone (converted to Zulu)
 ];
 
-formats.forEach(format => {
-  const parsed = parse(`{ time: ${format} }`, { parseTemporalInstants: true });
-  console.log(parsed.time instanceof Temporal.Instant); // true
+const durationFormats = [
+  "PT1H30M",                            // 1 hour 30 minutes
+  "P1DT2H3M4S",                        // 1 day 2 hours 3 minutes 4 seconds
+  "PT0.000000123S",                    // 123 nanoseconds
+  "PT1.5H"                             // 1.5 hours
+];
+
+instantFormats.forEach(format => {
+  const parsed = parse(`{ time: ${format} }`);
+  console.log(parsed.time.toString()); // Always in Zulu time
 });
 ```
 
-#### Date vs Temporal.Instant
-When both `parseDates` and `parseTemporalInstants` are enabled, Temporal.Instant takes precedence:
-
+#### Mathematical Operations
 ```typescript
-// Temporal.Instant takes precedence when both are enabled
-const parsed = parse(`{ timestamp: 2025-01-01T00:00:00.000Z }`, {
-  parseDates: true,
-  parseTemporalInstants: true
-});
+// Instant arithmetic
+const start = Instant.now();
+const duration = Duration.from("PT30M");
+const end = start.add(duration);
 
-console.log(parsed.timestamp instanceof Temporal.Instant); // true
-console.log(parsed.timestamp instanceof Date); // false
-```
+// Duration arithmetic  
+const d1 = Duration.from("PT1H");
+const d2 = Duration.from("PT30M");
+const total = d1.add(d2); // PT1H30M
 
-For round-trip consistency, choose one parsing mode:
-
-```typescript
-// Consistent Date parsing
-const dateMode = parse(json, { parseDates: true, parseTemporalInstants: false });
-
-// Consistent Temporal.Instant parsing  
-const temporalMode = parse(json, { parseDates: false, parseTemporalInstants: true });
+// Time differences
+const diff = end.since(start); // Returns Duration
+console.log(diff.toString()); // "PT30M"
 ```
 
 #### Performance & Compatibility
-- Graceful degradation: When Temporal API is not available, options are ignored
-- Round-trip consistency: Temporal.Instant objects serialize/parse perfectly
-- Nanosecond precision: Full support for high-precision timestamps
-- Zero runtime overhead when not used
+- **Temporal API**: Uses native Temporal.Instant/Duration when available
+- **Polyfill**: Compatible polyfills when Temporal API unavailable
+- **Nanosecond precision**: Full support for high-precision timestamps
+- **Zero overhead**: When not used, no performance impact
+- **Cross-platform**: Works in all Deno environments
 
 ```typescript
-// Run with: deno run --unstable-temporal script.ts
-import { parse } from "jsr:@atikayda/kjson";
-
-// Works regardless of Temporal availability
-const data = parse(`{ created: 2025-01-01T00:00:00.000Z }`, {
-  parseTemporalInstants: true,  // Ignored if Temporal not available
-  parseDates: true              // Fallback to Date objects
-});
+// Works in all environments
+const data = parse(`{ created: 2025-01-01T00:00:00.123456789Z }`);
+console.log(data.created.epochNanoseconds); // Works with both Temporal and polyfill
 ```
 
 ## 🎯 Real-World Use Cases
@@ -514,7 +560,7 @@ const data = parse(`{ created: 2025-01-01T00:00:00.000Z }`, {
 // Handle large integers common in data processing
 const dataMetrics = parse(`{
   totalRecords: 1234567890123456789n,
-  processedAt: 2025-01-15T10:30:00.000Z,
+  processedAt: 2025-01-15T10:30:00.123456789Z,
   batchSize: 1000000n,
   results: {
     successful: 999999n,
@@ -524,7 +570,7 @@ const dataMetrics = parse(`{
 }`);
 
 console.log(dataMetrics.totalRecords); // BigInt preserved
-console.log(dataMetrics.processedAt);  // Date object
+console.log(dataMetrics.processedAt.toString());  // "2025-01-15T10:30:00.123456789Z"
 ```
 
 ### ⚙️ Configuration Management
@@ -560,11 +606,11 @@ const appConfig = parse(`{
 // Type-preserving API responses
 const apiResponse = stringify({
   userId: 12345678901234567890n,  // Large user ID
-  timestamp: new Date(),
+  timestamp: Instant.now(),
   sessionId: "sess_" + Date.now(),
   data: {
     recordCount: 999999999999999999n,
-    lastUpdated: new Date(),
+    lastUpdated: Instant.now(),
     preferences: {
       theme: "dark",
       notifications: true
@@ -578,7 +624,7 @@ const wsMessage = stringify({
   id: 987654321n,
   value: 0.00123456,
   count: 1234567890123456789n,
-  timestamp: new Date(),
+  timestamp: Instant.now(),
   change: +5.67
 });
 ```
@@ -590,12 +636,12 @@ const gameState = parse(`{
   playerId: 123456789012345678901234567890n,
   score: 999999999999999999n,
   level: 42,
-  startTime: 2025-01-15T10:00:00.000Z,
+  startTime: 2025-01-15T10:00:00.123456789Z,
   powerUps: [
     {
       id: 1n,
-      duration: 30000n,  // 30 seconds in milliseconds
-      activatedAt: 2025-01-15T10:05:00.000Z
+      duration: PT30S,  // 30 seconds
+      activatedAt: 2025-01-15T10:05:00.123456789Z
     }
   ]
 }`);
@@ -645,7 +691,7 @@ interface UserConfig {
   name: string;
   maxRetries: number;
   timeout: bigint;
-  createdAt: Date;
+  createdAt: Instant;
 }
 
 // Type-safe parsing
@@ -653,6 +699,7 @@ const config: UserConfig = parse(jsonString);
 
 // IntelliSense works perfectly
 console.log(config.timeout); // TypeScript knows this is bigint
+console.log(config.createdAt.toString()); // TypeScript knows this is Instant
 ```
 
 ## 🤝 Contributing
@@ -697,40 +744,70 @@ The kJSON logo and brand assets are available in the [`assets/`](assets/) direct
 - **PNG**: High-quality raster format (for general use)
 - **WebP**: Modern web-optimized format (smaller file sizes)
 
+## 🌍 Client Libraries
+
+kJSON is available in multiple programming languages, each with full feature support:
+
+### TypeScript/Deno (Main Library)
+```typescript
+import { parse, stringify, Instant, Duration } from "jsr:@atikayda/kjson";
+```
+- **Repository**: This repository
+- **Features**: Full feature set with Temporal API compatibility
+- **Documentation**: [Main README](README.md)
+
+### C Client
+```c
+#include "kjson.h"
+kjson_value* parsed = kjson_parse(json_string);
+```
+- **Path**: [`clients/c/`](clients/c/)
+- **Features**: Full feature set with nanosecond precision
+- **Documentation**: [C Client README](clients/c/README.md)
+
+### Python Client
+```python
+import kjson
+data = kjson.parse('{"timestamp": 2025-01-01T00:00:00.123456789Z}')
+```
+- **Path**: [`clients/python/`](clients/python/)
+- **Features**: Full feature set with datetime integration
+- **Documentation**: [Python Client README](clients/python/README.md)
+
+### Rust Client
+```rust
+use kjson::{parse, stringify, Instant, Duration};
+let data = parse(r#"{"timeout": "PT1H30M"}"#)?;
+```
+- **Path**: [`clients/rust/`](clients/rust/)
+- **Features**: Full feature set with chrono integration
+- **Documentation**: [Rust Client README](clients/rust/README.md)
+
+### Golang Client
+```go
+import "github.com/atikayda/kjson/golang"
+data, err := kjson.Parse(`{"balance": 123456789n}`)
+```
+- **Path**: [`clients/golang/`](clients/golang/)
+- **Features**: Full feature set with time.Time integration
+- **Documentation**: [Golang Client README](clients/golang/README.md)
+
+### PostgreSQL Extension
+```sql
+CREATE EXTENSION kjson;
+SELECT '{"created": 2025-01-01T00:00:00.123456789Z}'::kjson;
+```
+- **Path**: [`clients/postgres/`](clients/postgres/)
+- **Features**: Native PostgreSQL types + unified temporal system
+- **Documentation**: [PostgreSQL Client README](clients/postgres/README.md)
+
+All clients maintain API consistency and support the same core types: **BigInt**, **Decimal128**, **UUID**, **Instant**, **Duration**, and **JSON5 syntax**.
+
 ## 🚀 Repository
 
 **GitHub**: [https://github.com/atikayda/kjson](https://github.com/atikayda/kjson)  
 **JSR**: [https://jsr.io/@atikayda/kjson](https://jsr.io/@atikayda/kjson)
 
-## 📋 Changelog
-
-### v1.1.0 (Temporal.Instant Support)
-- ⏰ **NEW**: Temporal.Instant support with `parseTemporalInstants` and `serializeTemporalInstants` options
-- 🎯 Nanosecond precision timestamp support (e.g., `2025-01-01T00:00:00.123456789Z`)
-- 🔧 Requires Deno `--unstable-temporal` flag for Temporal API access
-- 🛡️ Graceful degradation when Temporal API is not available
-- 📚 Comprehensive Temporal.Instant documentation and examples
-- ✅ Full test coverage with 10+ new Temporal-specific tests
-
-### v1.0.1 (Documentation Update)
-- 📖 Enhanced README with comprehensive documentation
-- 🎨 Improved logo display (WebP format)
-- 🌟 Added detailed use cases and examples
-- 🤝 Enhanced contribution guidelines
-- 🔗 Added GitHub repository links
-- 📚 Better API documentation with parameters and returns
-
-### v1.0.0 (Initial Release)
-- ✨ Beautiful gradient logo design
-- 🚀 Full JSON5 syntax support (comments, trailing commas, unquoted keys)
-- 🔢 BigInt type support with `n` suffix
-- 📅 Date object parsing and serialization
-- 🛡️ Comprehensive test suite (30 tests, 100% pass rate)
-- 📚 TypeScript-first design with full type definitions
-- ⚡ Performance optimizations with reasonable overhead
-- 📖 Complete documentation with real-world examples
-- 🎯 Developer-friendly API with utility functions
-- 🌐 Cross-platform support (Deno, Node.js via JSR)
 
 ---
 

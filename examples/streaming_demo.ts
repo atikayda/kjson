@@ -141,6 +141,5 @@ for await (const obj of parseStream(errorStream, {
 console.log(`\nSummary: ${successCount} successful, ${errors.length} errors`);
 errors.forEach(e => console.log(`✗ ${e}`));
 
-// Cleanup
 await Deno.remove(outputFile);
 console.log(`\nDemo complete! Cleaned up ${outputFile}`);

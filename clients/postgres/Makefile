@@ -1,5 +1,5 @@
 EXTENSION = kjson
-DATA = sql/kjson--1.0.0.sql
+DATA = sql/kjson--1.0.0.sql sql/kjson--1.0.1.sql sql/kjson--1.0.0--1.0.1.sql
 MODULE_big = kjson
 
 # Source files - using native implementation

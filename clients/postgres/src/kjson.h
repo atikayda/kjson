@@ -98,6 +98,12 @@ Datum kjson_array_length(PG_FUNCTION_ARGS);
 Datum kjson_object_keys(PG_FUNCTION_ARGS);
 Datum kjson_strip_nulls(PG_FUNCTION_ARGS);
 
+/* Unified temporal functions */
+Datum kjson_build_instant(PG_FUNCTION_ARGS);
+Datum kjson_build_duration(PG_FUNCTION_ARGS);
+Datum kjson_extract_kinstant(PG_FUNCTION_ARGS);
+Datum kjson_extract_kduration(PG_FUNCTION_ARGS);
+
 /* Internal helper functions that bridge kJSON C library with PostgreSQL */
 PGKJson *kjson_value_to_pg(kjson_value *value);
 kjson_value *pg_to_kjson_value(PGKJson *pgkj);

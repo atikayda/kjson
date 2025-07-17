@@ -72,7 +72,6 @@ kjson_in(PG_FUNCTION_ARGS)
     uint8_t      *binary;
     size_t        binary_size;
 
-    /* Parse the kJSON text */
     value = kjson_parse_ex(str, strlen(str), get_kjson_options(), &error);
     
     if (value == NULL)
@@ -83,7 +82,6 @@ kjson_in(PG_FUNCTION_ARGS)
                  errmsg("invalid input syntax for type kjson: %s", error_msg)));
     }
 
-    /* Convert to binary format */
     binary = kjson_encode_binary(value, &binary_size);
     if (binary == NULL)
     {
@@ -93,12 +91,10 @@ kjson_in(PG_FUNCTION_ARGS)
                  errmsg("failed to encode kjson to binary format")));
     }
 
-    /* Allocate PostgreSQL result */
     result = (PGKJson *) palloc(VARHDRSZ + binary_size);
     SET_VARSIZE(result, VARHDRSZ + binary_size);
     memcpy(PGKJSON_DATA(result), binary, binary_size);
 
-    /* Clean up */
     kjson_free(value);
     free(binary);  /* binary was allocated by kjson_encode_binary using standard malloc */
 
@@ -119,7 +115,6 @@ kjson_out(PG_FUNCTION_ARGS)
     kjson_error   error;
     char         *result;
 
-    /* Decode from binary format */
     value = kjson_decode_binary(PGKJSON_DATA(pgkj), PGKJSON_DATA_SIZE(pgkj), &error);
     if (value == NULL)
     {
@@ -129,7 +124,6 @@ kjson_out(PG_FUNCTION_ARGS)
                  errmsg("corrupt kjson binary data: %s", error_msg)));
     }
 
-    /* Convert to text */
     kjson_write_options write_opts = {
         .indent = 0,
         .quote_keys = false,
@@ -147,7 +141,6 @@ kjson_out(PG_FUNCTION_ARGS)
                  errmsg("failed to stringify kjson")));
     }
 
-    /* Clean up - result needs to be in PostgreSQL memory context */
     char *pg_result = pstrdup(result);
     kjson_free(value);
     free(result);  /* result was allocated by kjson_stringify using standard malloc */
@@ -171,7 +164,6 @@ kjson_recv(PG_FUNCTION_ARGS)
     kjson_value  *value;
     kjson_error   error;
     
-    /* Get the size of data */
     nbytes = buf->len - buf->cursor;
     
     /* Validate it's valid kJSONB by trying to decode */
@@ -184,11 +176,9 @@ kjson_recv(PG_FUNCTION_ARGS)
     }
     kjson_free(value);
     
-    /* Allocate result */
     result = (PGKJson *) palloc(VARHDRSZ + nbytes);
     SET_VARSIZE(result, VARHDRSZ + nbytes);
     
-    /* Copy the binary data */
     pq_copymsgbytes(buf, (char *) PGKJSON_DATA(result), nbytes);
     
     PG_RETURN_POINTER(result);
@@ -209,7 +199,6 @@ kjson_send(PG_FUNCTION_ARGS)
     
     pq_begintypsend(&buf);
     
-    /* Send the kJSONB binary data */
     pq_sendbytes(&buf, (char *) PGKJSON_DATA(pgkj), PGKJSON_DATA_SIZE(pgkj));
     
     PG_RETURN_BYTEA_P(pq_endtypsend(&buf));

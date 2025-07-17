@@ -6,7 +6,9 @@ A comprehensive C implementation of the kJSON format with extended type support.
 
 This implementation provides:
 - **Full kJSON parser and stringifier** with DOM-style API
-- **Extended type support** for BigInt, Decimal128, UUID, and Date
+- **Extended type support** for BigInt, Decimal128, UUID, Instant, and Duration
+- **Nanosecond precision timestamps** in Zulu time (UTC)
+- **ISO 8601 duration support** with nanosecond precision
 - **Binary format (kJSONB)** encoding and decoding
 - **JSON5 syntax support** including comments and unquoted keys
 - **Memory management flexibility** with custom allocators
@@ -19,7 +21,8 @@ This implementation provides:
   - BigInt with arbitrary precision (stored as strings)
   - Decimal128 with configurable precision
   - UUID automatic detection and parsing
-  - ISO 8601 date/time parsing
+  - Instant with nanosecond precision timestamps in Zulu time
+  - Duration with ISO 8601 format and nanosecond precision
 - JSON5 syntax features:
   - Single and multi-line comments
   - Unquoted object keys

@@ -1,5 +1,5 @@
 # kjson extension
 comment = 'kJSON data type with binary storage and text I/O'
-default_version = '1.0.0'
+default_version = '1.0.1'
 module_pathname = '$libdir/kjson'
 relocatable = true

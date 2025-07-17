@@ -134,7 +134,6 @@ compare_kjson_values(kjson_value *a, kjson_value *b)
                 if (!b->u.decimal) return 1;
                 
                 /* TODO: Proper decimal comparison considering exponent */
-                /* For now, convert to string and compare */
                 str_a = pg_kjson_stringify(a, &opts);
                 str_b = pg_kjson_stringify(b, &opts);
                 result = strcmp(str_a, str_b);

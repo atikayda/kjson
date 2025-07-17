@@ -58,22 +58,29 @@ typedef struct {
     unsigned char bytes[16];
 } kjson_uuid;
 
-/* Instant type */
+/* kInstant structure - 16 bytes total */
 typedef struct {
-    int64_t nanoseconds;    /* Nanoseconds since epoch */
-    int16_t tz_offset;      /* Timezone offset in minutes */
-} kjson_instant;
+    int64_t nanoseconds;    /* Nanoseconds since epoch (8 bytes) */
+    int16_t tz_offset;      /* Timezone offset in minutes (2 bytes) */
+    int16_t reserved;       /* Reserved for future use (2 bytes) */
+    int32_t reserved2;      /* Reserved for future use (4 bytes) */
+} kInstant;
 
-/* Duration type - ISO 8601 duration support */
+/* kDuration structure - 32 bytes total */
 typedef struct {
-    int32_t years;          /* Years component */
-    int32_t months;         /* Months component */
-    int32_t days;           /* Days component */
-    int32_t hours;          /* Hours component */
-    int32_t minutes;        /* Minutes component */
-    int64_t nanoseconds;    /* Seconds + fractional seconds as nanoseconds */
-    bool negative;          /* True for negative durations */
-} kjson_duration;
+    int32_t years;          /* Years component (4 bytes) */
+    int32_t months;         /* Months component (4 bytes) */
+    int32_t days;           /* Days component (4 bytes) */
+    int32_t hours;          /* Hours component (4 bytes) */
+    int32_t minutes;        /* Minutes component (4 bytes) */
+    int64_t nanoseconds;    /* Seconds + fractional seconds as nanoseconds (8 bytes) */
+    bool negative;          /* True for negative durations (1 byte) */
+    char reserved[7];       /* Reserved for future use (7 bytes) */
+} kDuration;
+
+/* Use kInstant and kDuration directly for kjson temporal types */
+typedef kInstant kjson_instant;
+typedef kDuration kjson_duration;
 
 /* Object member */
 struct kjson_member {

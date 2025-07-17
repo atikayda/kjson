@@ -11,7 +11,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # Import all test modules
 from tests import test_types, test_parser, test_serializer
 
-# Create test suite
 loader = unittest.TestLoader()
 suite = unittest.TestSuite()
 

@@ -7,7 +7,8 @@ A Go implementation of the kJSON (Kind JSON) specification with extended type su
 - **BigInt Support** - Handle large integers without precision loss (with `n` suffix)
 - **Decimal128 Support** - High-precision decimal numbers (with `m` suffix)  
 - **UUID Support** - Native UUID parsing and generation (v4 and v7)
-- **Instant and Duration Support** - ISO 8601 date/time parsing and formatting
+- **Instant Support** - Nanosecond-precision timestamps in Zulu time (UTC)
+- **Duration Support** - ISO 8601 duration format with nanosecond precision
 - **JSON5 Syntax** - Unquoted keys, trailing commas, comments (parsing only)
 - **Struct Tags** - Support for `kjson` tags with `json` tag fallback
 - **encoding/json Compatibility** - Drop-in replacement with familiar API
@@ -121,21 +122,38 @@ var parsed uuid.UUID
 kjson.Unmarshal(data, &parsed)
 ```
 
-### Date
+### Instant
 
-ISO 8601 date/time support:
+Nanosecond-precision timestamps in Zulu time (UTC):
 
 ```go
-// Create Date
-date := kjson.NewDate(time.Now())
+// Create Instant
+instant := kjson.NewInstant(time.Now())
 
 // Marshal
-data, _ := kjson.Marshal(date)
-// Output: 2025-01-10T12:00:00Z
+data, _ := kjson.Marshal(instant)
+// Output: 2025-01-10T12:00:00.123456789Z
 
 // Parse
-var parsed kjson.Date
-kjson.Unmarshal([]byte("2025-01-10T12:00:00Z"), &parsed)
+var parsed kjson.Instant
+kjson.Unmarshal([]byte("2025-01-10T12:00:00.123456789Z"), &parsed)
+```
+
+### Duration
+
+ISO 8601 duration format with nanosecond precision:
+
+```go
+// Create Duration
+duration := kjson.NewDuration(time.Hour * 2)
+
+// Marshal
+data, _ := kjson.Marshal(duration)
+// Output: PT2H
+
+// Parse
+var parsed kjson.Duration
+kjson.Unmarshal([]byte("PT1H30M"), &parsed)
 ```
 
 ## Struct Tags
@@ -209,7 +227,8 @@ The Go client can parse and generate these kJSON formats:
   id: 550e8400-e29b-41d4-a716-446655440000,      // Unquoted UUID
   bigNumber: 123456789012345678901234567890n,     // BigInt with 'n' suffix
   price: 99.99m,                                  // Decimal128 with 'm' suffix  
-  created: 2025-01-10T12:00:00Z,                  // ISO 8601 date
+  created: 2025-01-10T12:00:00.123456789Z,        // Nanosecond-precision Instant
+  timeout: PT1H30M,                               // ISO 8601 Duration
   active: true,                                   // Standard types
   tags: ["new", "sale"],                          // Arrays
   metadata: {                                     // Nested objects

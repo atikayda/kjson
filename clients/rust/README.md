@@ -1,13 +1,14 @@
 # kJSON Rust Client
 
-A Rust implementation of the kJSON (Kind JSON) specification with extended type support including BigInt, Decimal128, UUID, and Date types.
+A Rust implementation of the kJSON (Kind JSON) specification with extended type support including BigInt, Decimal128, UUID, Instant, and Duration types.
 
 ## Features
 
 - **BigInt Support** - Handle arbitrarily large integers (with `n` suffix)
 - **Decimal128 Support** - High-precision decimal numbers (with `m` suffix)
 - **UUID Support** - Native UUID parsing and generation (v4 and v7)
-- **Date Support** - ISO 8601 date/time parsing and formatting
+- **Instant Support** - Nanosecond-precision timestamps in Zulu time (UTC)
+- **Duration Support** - ISO 8601 duration format with nanosecond precision
 - **JSON5 Syntax** - Unquoted keys, trailing commas, comments
 - **Serde Integration** - Works with existing Rust serialization ecosystem
 - **Zero-Copy Parsing** - Efficient memory usage where possible
@@ -32,7 +33,7 @@ kjson = { version = "0.1.0", features = ["derive"] }
 
 ```rust
 use kjson::{parse, to_string, Value};
-use kjson::types::{BigInt, Decimal128, Date, uuid_v4};
+use kjson::types::{BigInt, Decimal128, Instant, Duration, uuid_v4};
 use std::collections::HashMap;
 
 fn main() -> kjson::Result<()> {
@@ -41,7 +42,8 @@ fn main() -> kjson::Result<()> {
         id: 550e8400-e29b-41d4-a716-446655440000,
         bigNumber: 123456789012345678901234567890n,
         price: 99.99m,
-        created: 2025-01-10T12:00:00Z,
+        created: 2025-01-10T12:00:00.123456789Z,
+        timeout: PT1H30M,
         active: true,
         tags: ["new", "sale"]
     }"#;
@@ -121,21 +123,38 @@ match value {
 }
 ```
 
-### Date
+### Instant
 
-ISO 8601 date/time support:
+Nanosecond-precision timestamps in Zulu time (UTC):
 
 ```rust
-use kjson::types::Date;
+use kjson::types::Instant;
 use chrono::Utc;
 
-// Create Date
-let date = Date::from_utc(Utc::now());
-let value = Value::Date(date);
-let json = to_string(&value)?; // "2025-01-10T12:00:00Z"
+// Create Instant
+let instant = Instant::now();
+let value = Value::Instant(instant);
+let json = to_string(&value)?; // "2025-01-10T12:00:00.123456789Z"
 
-// Parse Date
-let value = parse("2025-01-10T12:00:00Z")?;
+// Parse Instant
+let value = parse("2025-01-10T12:00:00.123456789Z")?;
+```
+
+### Duration
+
+ISO 8601 duration format with nanosecond precision:
+
+```rust
+use kjson::types::Duration;
+use std::time::Duration as StdDuration;
+
+// Create Duration
+let duration = Duration::from_std(StdDuration::from_secs(3600));
+let value = Value::Duration(duration);
+let json = to_string(&value)?; // "PT1H"
+
+// Parse Duration
+let value = parse("PT2H30M")?;
 ```
 
 ## JSON5 Features
@@ -236,7 +255,7 @@ match parse("{invalid json}") {
 
 ## Differences from Standard JSON
 
-1. **Extended Types**: BigInt (`n`), Decimal128 (`m`), unquoted UUIDs and Dates
+1. **Extended Types**: BigInt (`n`), Decimal128 (`m`), unquoted UUIDs, Instants, and Durations
 2. **JSON5 Syntax**: Comments, unquoted keys, trailing commas
 3. **Relaxed Parsing**: More forgiving of common syntax patterns
 4. **Type Preservation**: Extended types maintain precision and semantics
@@ -249,7 +268,8 @@ match parse("{invalid json}") {
     id: 550e8400-e29b-41d4-a716-446655440000,     // Unquoted UUID
     bigNumber: 123456789012345678901234567890n,    // BigInt with 'n' suffix
     price: 99.99m,                                 // Decimal128 with 'm' suffix
-    created: 2025-01-10T12:00:00Z,                 // ISO 8601 date
+    created: 2025-01-10T12:00:00.123456789Z,       // Nanosecond-precision Instant
+    timeout: PT1H30M,                              // ISO 8601 Duration
     active: true,
     tags: ["new", "sale"],
     metadata: {

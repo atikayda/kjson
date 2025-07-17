@@ -13,6 +13,7 @@
 #include "utils/numeric.h"
 #include "utils/timestamp.h"
 #include "utils/memutils.h"
+#include "utils/array.h"
 #include "catalog/pg_type.h"
 #include "lib/stringinfo.h"
 #include "utils/lsyscache.h"
@@ -24,7 +25,6 @@
 #define PG_KJSON_INTERNAL_ONLY
 #include "kjson_internal.h"
 
-/* PG_MODULE_MAGIC is defined in kjson_io_native.c */
 
 /* PostgreSQL kjson type structure */
 typedef struct
@@ -36,6 +36,72 @@ typedef struct
 /* Macros for accessing kjson data */
 #define PGKJSON_DATA(x)       ((x)->data)
 #define PGKJSON_DATA_SIZE(x)  (VARSIZE(x) - VARHDRSZ)
+
+/* Helper function to extract value at path */
+static kjson_value *
+kjson_get_path_value(kjson_value *root, struct ArrayType *path_array)
+{
+    kjson_value *current;
+    int path_len;
+    int i;
+    Datum *path_datums;
+    bool *path_nulls;
+    char *key;
+    
+    current = root;
+    
+    if (!root || !path_array)
+        return NULL;
+        
+    deconstruct_array(path_array, TEXTOID, -1, false, 'i',
+                      &path_datums, &path_nulls, &path_len);
+    
+    for (i = 0; i < path_len; i++) {
+        if (path_nulls && path_nulls[i])
+            return NULL;
+            
+        key = TextDatumGetCString(path_datums[i]);
+        
+        if (current->type == KJSON_TYPE_OBJECT) {
+            kjson_member *member;
+            bool found;
+            
+            member = current->u.object.first;
+            found = false;
+            
+            while (member) {
+                if (strcmp(member->key, key) == 0) {
+                    current = member->value;
+                    found = true;
+                    break;
+                }
+                member = member->next;
+            }
+            
+            if (!found) {
+                pfree(key);
+                return NULL;
+            }
+        }
+        else if (current->type == KJSON_TYPE_ARRAY) {
+            int index = atoi(key);
+            if (index >= 0 && index < current->u.array.count)
+                current = current->u.array.items[index];
+            else {
+                pfree(key);
+                return NULL;
+            }
+        }
+        else {
+            pfree(key);
+            return NULL;
+        }
+        
+        pfree(key);
+    }
+    
+    return current;
+}
 
 /* Internal aggregate state */
 typedef struct {
@@ -759,4 +825,206 @@ kjson_array_elements_text(PG_FUNCTION_ARGS)
     } else {
         SRF_RETURN_DONE(funcctx);
     }
+}
+
+/*
+ * kjson_build_instant - Build kjson instant from kInstant
+ */
+PG_FUNCTION_INFO_V1(kjson_build_instant);
+Datum
+kjson_build_instant(PG_FUNCTION_ARGS)
+{
+    kInstant *instant = (kInstant *) PG_GETARG_POINTER(0);
+    MemoryContext oldcontext;
+    MemoryContext buildcontext;
+    kjson_value *instant_value;
+    StringInfo binary;
+    PGKJson *result;
+    
+    /* Create temporary memory context */
+    buildcontext = AllocSetContextCreate(CurrentMemoryContext,
+                                        "kJSON instant build context",
+                                        ALLOCSET_DEFAULT_SIZES);
+    oldcontext = MemoryContextSwitchTo(buildcontext);
+    
+    /* Create kjson instant value */
+    instant_value = MemoryContextAlloc(buildcontext, sizeof(kjson_value));
+    instant_value->type = KJSON_TYPE_INSTANT;
+    instant_value->u.instant = MemoryContextAlloc(buildcontext, sizeof(kInstant));
+    memcpy(instant_value->u.instant, instant, sizeof(kInstant));
+    
+    /* Encode to binary */
+    binary = pg_kjson_encode_binary(instant_value);
+    
+    /* Switch back to original context */
+    MemoryContextSwitchTo(oldcontext);
+    
+    /* Create result */
+    result = (PGKJson *) palloc(VARHDRSZ + binary->len);
+    SET_VARSIZE(result, VARHDRSZ + binary->len);
+    memcpy(PGKJSON_DATA(result), binary->data, binary->len);
+    
+    /* Clean up */
+    MemoryContextDelete(buildcontext);
+    
+    PG_RETURN_POINTER(result);
+}
+
+/*
+ * kjson_build_duration - Build kjson duration from kDuration
+ */
+PG_FUNCTION_INFO_V1(kjson_build_duration);
+Datum
+kjson_build_duration(PG_FUNCTION_ARGS)
+{
+    kDuration *duration = (kDuration *) PG_GETARG_POINTER(0);
+    MemoryContext oldcontext;
+    MemoryContext buildcontext;
+    kjson_value *duration_value;
+    StringInfo binary;
+    PGKJson *result;
+    
+    /* Create temporary memory context */
+    buildcontext = AllocSetContextCreate(CurrentMemoryContext,
+                                        "kJSON duration build context",
+                                        ALLOCSET_DEFAULT_SIZES);
+    oldcontext = MemoryContextSwitchTo(buildcontext);
+    
+    /* Create kjson duration value */
+    duration_value = MemoryContextAlloc(buildcontext, sizeof(kjson_value));
+    duration_value->type = KJSON_TYPE_DURATION;
+    duration_value->u.duration = MemoryContextAlloc(buildcontext, sizeof(kDuration));
+    memcpy(duration_value->u.duration, duration, sizeof(kDuration));
+    
+    /* Encode to binary */
+    binary = pg_kjson_encode_binary(duration_value);
+    
+    /* Switch back to original context */
+    MemoryContextSwitchTo(oldcontext);
+    
+    /* Create result */
+    result = (PGKJson *) palloc(VARHDRSZ + binary->len);
+    SET_VARSIZE(result, VARHDRSZ + binary->len);
+    memcpy(PGKJSON_DATA(result), binary->data, binary->len);
+    
+    /* Clean up */
+    MemoryContextDelete(buildcontext);
+    
+    PG_RETURN_POINTER(result);
+}
+
+/*
+ * kjson_extract_kinstant - Extract kInstant value from kjson path
+ *
+ * Usage: kjson_extract_kinstant(kjson_value, 'field1', 'field2', ...)
+ */
+PG_FUNCTION_INFO_V1(kjson_extract_kinstant);
+Datum
+kjson_extract_kinstant(PG_FUNCTION_ARGS)
+{
+    PGKJson      *pgkj = (PGKJson *) PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+    struct ArrayType    *path = PG_GETARG_ARRAYTYPE_P(1);
+    kjson_value  *value;
+    kjson_value  *result;
+    MemoryContext oldcontext;
+    MemoryContext parsecontext;
+    kInstant     *instant_result;
+    
+    /* Create temporary memory context */
+    parsecontext = AllocSetContextCreate(CurrentMemoryContext,
+                                         "kjson_extract_kinstant",
+                                         ALLOCSET_DEFAULT_SIZES);
+    oldcontext = MemoryContextSwitchTo(parsecontext);
+    
+    /* Decode from binary */
+    value = pg_kjson_decode_binary(PGKJSON_DATA(pgkj),
+                                   PGKJSON_DATA_SIZE(pgkj),
+                                   parsecontext);
+    if (value == NULL)
+    {
+        MemoryContextSwitchTo(oldcontext);
+        MemoryContextDelete(parsecontext);
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_BINARY_REPRESENTATION),
+                 errmsg("corrupt kjson binary data")));
+    }
+    
+    /* Navigate path */
+    result = kjson_get_path_value(value, path);
+    
+    /* Check if we found an instant */
+    if (result == NULL || result->type != KJSON_TYPE_INSTANT)
+    {
+        MemoryContextSwitchTo(oldcontext);
+        MemoryContextDelete(parsecontext);
+        PG_RETURN_NULL();
+    }
+    
+    /* Switch back to original context */
+    MemoryContextSwitchTo(oldcontext);
+    
+    /* Create result - use the unified types */
+    instant_result = (kInstant *) palloc(sizeof(kInstant));
+    memcpy(instant_result, result->u.instant, sizeof(kInstant));
+    
+    MemoryContextDelete(parsecontext);
+    PG_RETURN_POINTER(instant_result);
+}
+
+/*
+ * kjson_extract_kduration - Extract kDuration value from kjson path
+ *
+ * Usage: kjson_extract_kduration(kjson_value, 'field1', 'field2', ...)
+ */
+PG_FUNCTION_INFO_V1(kjson_extract_kduration);
+Datum
+kjson_extract_kduration(PG_FUNCTION_ARGS)
+{
+    PGKJson      *pgkj = (PGKJson *) PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+    struct ArrayType    *path = PG_GETARG_ARRAYTYPE_P(1);
+    kjson_value  *value;
+    kjson_value  *result;
+    MemoryContext oldcontext;
+    MemoryContext parsecontext;
+    kDuration    *duration_result;
+    
+    /* Create temporary memory context */
+    parsecontext = AllocSetContextCreate(CurrentMemoryContext,
+                                         "kjson_extract_kduration",
+                                         ALLOCSET_DEFAULT_SIZES);
+    oldcontext = MemoryContextSwitchTo(parsecontext);
+    
+    /* Decode from binary */
+    value = pg_kjson_decode_binary(PGKJSON_DATA(pgkj),
+                                   PGKJSON_DATA_SIZE(pgkj),
+                                   parsecontext);
+    if (value == NULL)
+    {
+        MemoryContextSwitchTo(oldcontext);
+        MemoryContextDelete(parsecontext);
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_BINARY_REPRESENTATION),
+                 errmsg("corrupt kjson binary data")));
+    }
+    
+    /* Navigate path */
+    result = kjson_get_path_value(value, path);
+    
+    /* Check if we found a duration */
+    if (result == NULL || result->type != KJSON_TYPE_DURATION)
+    {
+        MemoryContextSwitchTo(oldcontext);
+        MemoryContextDelete(parsecontext);
+        PG_RETURN_NULL();
+    }
+    
+    /* Switch back to original context */
+    MemoryContextSwitchTo(oldcontext);
+    
+    /* Create result - use the unified types */
+    duration_result = (kDuration *) palloc(sizeof(kDuration));
+    memcpy(duration_result, result->u.duration, sizeof(kDuration));
+    
+    MemoryContextDelete(parsecontext);
+    PG_RETURN_POINTER(duration_result);
 }

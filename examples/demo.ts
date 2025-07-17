@@ -73,7 +73,6 @@ const kjsonString = stringify(testData, { space: 2 });
 console.log(kjsonString);
 console.log();
 
-// Parse it back
 console.log("🔄 Parsed back to JavaScript:");
 const parsed = parse(kjsonString);
 console.log(parsed);
@@ -142,7 +141,6 @@ const safeResult2 = kJSON.safeParseWith('{ invalid }', { default: true });
 console.log(`  Invalid input with default: ${JSON.stringify(safeResult2)}`);
 console.log();
 
-// Create custom parser
 console.log("Custom parser example:");
 const strictParser = kJSON.createParser({
   allowTrailingCommas: false,
@@ -158,7 +156,6 @@ try {
 }
 console.log();
 
-// Create custom stringifier
 console.log("Custom stringifier example:");
 const prettyStringifier = kJSON.createStringifier({
   space: 2,
