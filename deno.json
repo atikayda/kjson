@@ -1,6 +1,6 @@
 {
   "name": "@atikayda/kjson",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "exports": "./mod.ts",
   "icon": "assets/kJSON.webp",
   "description": "🎯 kJSON - Kind JSON parser with BigInt, Date, Temporal.Instant & JSON5 support. Developer-friendly JSON parsing for modern JavaScript/TypeScript.",
