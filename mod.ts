@@ -809,7 +809,7 @@ export function stringify(value: any, options: KJsonStringifyOptions = {}): stri
       .replace(/\n/g, '\\n')
       .replace(/\r/g, '\\r')
       .replace(/\t/g, '\\t')
-      .replace(/\b/g, '\\b')
+      .replace(/[\b]/g, '\\b')  // Use [\b] to match backspace character, not word boundary
       .replace(/\f/g, '\\f');
     
     // Escape the chosen quote character
